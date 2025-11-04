@@ -1,4 +1,4 @@
-# 🧭 Vibe Recommendation Pipeline – Smart Tourism System (Context 2)
+# 🧭 Vibe Recommendation Pipeline – Smart Tourism System
 
 ## 1️⃣ Mục tiêu
 
@@ -12,6 +12,7 @@ Mục tiêu là **tìm các địa điểm du lịch có cảm xúc tương đ�
 
 ## 2️⃣ Tổng quan pipeline
 
+```text
 Người dùng nhập vibe
 ↓
 Vector hóa (TF-IDF + SentenceTransformer)
@@ -21,7 +22,7 @@ Tính độ tương đồng (Cosine Similarity)
 Tìm top địa điểm gần nhất (KNN / Ranking)
 ↓
 Trả về gợi ý địa điểm phù hợp
-
+```
 
 ---
 
@@ -31,11 +32,11 @@ Trả về gợi ý địa điểm phù hợp
 
 TF-IDF đánh giá tầm quan trọng của một từ trong tập văn bản.
 
-\[
-\text{TF-IDF}(t,d) = TF(t,d) \times \log\left(\frac{N}{DF(t)}\right)
-\]
+$$
+TF\text{-}IDF(t, d) = TF(t, d) \times \log\left(\frac{N}{DF(t)}\right)
+$$
 
-- \(TF(t,d)\): tần suất của từ \(t\) trong tài liệu \(d\)  
+- \(TF(t, d)\): tần suất của từ \(t\) trong tài liệu \(d\)  
 - \(DF(t)\): số tài liệu chứa từ \(t\)  
 - \(N\): tổng số tài liệu  
 
@@ -52,6 +53,7 @@ TF-IDF giúp mô hình nắm được **từ khóa đặc trưng** của từng 
 Mục tiêu của mô hình là ánh xạ các câu có **nghĩa tương tự** vào **những điểm gần nhau trong không gian vector**.
 
 #### 🔬 Cấu trúc tổng quát
+```text
 Chuỗi đầu vào (sentence)
 ↓
 Tokenizer (chuyển từ → token ID)
@@ -61,35 +63,37 @@ Transformer Encoder (BERT / MiniLM / DistilBERT)
 Pooling Layer (Mean / Max / CLS token)
 ↓
 Sentence Embedding (vector ngữ nghĩa)
+```
 
 Mỗi câu sau khi đi qua mô hình sẽ được biểu diễn bằng một vector có 384–768 chiều (tuỳ model), ví dụ `all-MiniLM-L6-v2` tạo vector 384 chiều.
 
 #### ⚙️ Cơ chế hoạt động chi tiết
 
 1. **Tokenizer**  
-Chuyển câu đầu vào thành chuỗi token ID, ví dụ: 
-"Đà Lạt yên bình" → [101, 3912, 1652, 102]
-(mã hóa dựa trên WordPiece Tokenization)
+   Chuyển câu đầu vào thành chuỗi token ID, ví dụ:  
+   `"Đà Lạt yên bình" → [101, 3912, 1652, 102]`  
+   (mã hóa dựa trên WordPiece Tokenization)
 
 2. **Transformer Encoder**  
-Áp dụng *multi-head self-attention*, cho phép mô hình nắm bắt quan hệ giữa các từ theo ngữ cảnh hai chiều:
-\[
-\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V
-\]
-Trong đó:
-- \(Q, K, V\): ma trận truy vấn, khóa, giá trị  
-- \(d_k\): kích thước không gian ẩn (hidden size)
+   Áp dụng *multi-head self-attention*, cho phép mô hình nắm bắt quan hệ giữa các từ theo ngữ cảnh hai chiều:
+
+  `Attention(Q, K, V) = softmax( (QKᵀ) / √dₖ ) × V`
+
+   Trong đó:
+   - \(Q, K, V\): ma trận truy vấn, khóa, giá trị  
+   - \(d\_k\): kích thước không gian ẩn (hidden size)
 
 3. **Pooling Layer**  
-Trung bình hóa (mean pooling) toàn bộ token embedding thành một vector duy nhất:
-\[
-s = \frac{1}{n}\sum_{i=1}^{n}h_i
-\]
-với \(h_i\) là embedding của token thứ *i*.
+   Trung bình hóa (mean pooling) toàn bộ token embedding thành một vector duy nhất:
+
+   `s = (1/n) Σᵢ₌₁ⁿ hᵢ`
+
+
+   với \(h\_i\) là embedding của token thứ *i*.
 
 4. **Sentence Embedding**  
-Kết quả là vector ngữ nghĩa biểu diễn toàn câu, ví dụ:
-[0.123, -0.041, 0.332, ... , 0.027]
+   Kết quả là vector ngữ nghĩa biểu diễn toàn câu, ví dụ:
+   [0.123, -0.041, 0.332, ... , 0.027]
 
 #### 🧩 Trong bài toán Vibe Recommendation
 
@@ -114,28 +118,29 @@ Trong pipeline hiện tại:
 ```python
 from sentence_transformers import SentenceTransformer
 st = SentenceTransformer("all-MiniLM-L6-v2")
-
+```
 ---
 
 ## 4️⃣ Chuẩn hóa pipeline hybrid (TF-IDF + SentenceTransformer)
 
-Ta kết hợp hai loại vector để tận dụng cả **ngữ nghĩa** và **từ khóa**:
+Để tận dụng ưu điểm của cả hai mô hình — TF-IDF (hiểu từ khóa) và SentenceTransformer (hiểu ngữ nghĩa) — ta ghép chúng lại thành một vector lai (hybrid vector):
 
-\[
-V_{hybrid} = [V_{TFIDF} ; V_{ST}]
-\]
+**Công thức kết hợp:**
 
-(tức là nối 2 vector theo chiều ngang)
+`Vₕᵧᵇʳᶦᵈ = [ V_TFIDF ; V_ST ]`
+
+Tức là nối hai vector lại theo chiều ngang.  
+Ví dụ: nếu TF-IDF cho ra vector 5000 chiều và SentenceTransformer cho ra vector 384 chiều, thì vector lai có tổng cộng 5384 chiều.
 
 ---
 
 ## 5️⃣ Cosine Similarity
 
-Độ đo tương đồng giữa hai vector:
+Độ đo tương đồng phổ biến trong không gian vector được định nghĩa bằng **cosine similarity** — đo góc giữa hai vector.
 
-\[
-\text{cosine\_similarity}(A, B) = \frac{A \cdot B}{\|A\| \times \|B\|}
-\]
+**Công thức:**
+
+`cosine_similarity(A, B) = (A ∙ B) / (‖A‖ × ‖B‖)`
 
 Giá trị:
 - 1 → giống hệt  
@@ -148,9 +153,7 @@ Giá trị:
 
 KNN tìm **k điểm gần nhất** với vector đầu vào trong không gian cosine.
 
-\[
-d_{cos}(A,B) = 1 - \text{cosine\_similarity}(A,B)
-\]
+`d₍cos₎(A, B) = 1 − cosine_similarity(A, B)`
 
 → Chọn **k địa điểm có khoảng cách nhỏ nhất** để gợi ý.
 
@@ -177,55 +180,64 @@ df = pd.DataFrame({
         "núi, lạnh, thiên nhiên, hùng vĩ, yên bình"
     ]
 })
-
+```
 1. TF-IDF Vectorization
+```python
 tfidf = TfidfVectorizer(max_features=5000)
 tfidf_vecs = tfidf.fit_transform(df["description"])
 tfidf_vecs = normalize(tfidf_vecs)
-
+```
 2. SentenceTransformer Embedding
+```python
 st = SentenceTransformer("all-MiniLM-L6-v2")
 st_vecs = st.encode(df["description"].tolist(), convert_to_numpy=True)
 st_vecs = normalize(st_vecs)
-
+```
 3. Tạo Hybrid Vector
+```python
 hybrid_vecs = np.concatenate([tfidf_vecs.toarray(), st_vecs], axis=1)
-
+```
 4. Tạo KNN Model
+```python
 knn = NearestNeighbors(metric="cosine", n_neighbors=3)
 knn.fit(hybrid_vecs)
+```
 
 5. Vector hóa input người dùng
+```python
 user_vibe = "tôi muốn đi nơi yên bình, nhiều cây xanh, khí hậu mát mẻ"
 
 user_tfidf = tfidf.transform([user_vibe]).toarray()
 user_st = st.encode([user_vibe], convert_to_numpy=True)
 user_vec = np.concatenate([user_tfidf, user_st], axis=1)
 user_vec = normalize(user_vec)
-
+```
 6. Tính Cosine Similarity + KNN gợi ý
 # Cosine Similarity
+```python
 sim_scores = cosine_similarity(user_vec, hybrid_vecs).flatten()
-
+```
 # KNN
+```python
 distances, indices = knn.kneighbors(user_vec)
-
+```
 # Hiển thị kết quả
+```python
 for idx in indices[0]:
     print(f"🏞 {df['name'][idx]} — similarity: {sim_scores[idx]:.3f}"
-
+```
 💡 Kết quả mẫu
+```
 🏞 Đà Lạt — similarity: 0.893
 🏞 Sa Pa — similarity: 0.752
 🏞 Hội An — similarity: 0.640
-
+```
 ## 8️⃣ Tổng hợp công thức pipeline
 
 Độ tương đồng giữa "vibe" của người dùng và mỗi địa điểm được tính bằng **Cosine Similarity** giữa hai vector hybrid (TF-IDF + SentenceTransformer):
 
-\[
-\text{Sim}(u, i) = \cos\left( [TFIDF(u); ST(u)], [TFIDF(i); ST(i)] \right)
-\]
+`Sim(u, i) = cos ( [ TFIDF(u); ST(u) ], [ TFIDF(i); ST(i) ] )`
+
 
 Trong đó:
 - **u**: vector vibe của người dùng  
@@ -234,9 +246,8 @@ Trong đó:
 
 Nếu sử dụng KNN để lấy *k* điểm gần nhất:
 
-\[
-\text{Top}_k = \text{argsort}_i(1 - \text{Sim}(u, i))[:k]
-\]
+`Topₖ = argsortᵢ ( 1 − Sim(u, i) )[:k]`
+
 
 ---
 
@@ -251,11 +262,3 @@ Nếu sử dụng KNN để lấy *k* điểm gần nhất:
 
 ---
 
-## 🔟 Ứng dụng trong hệ thống du lịch thông minh
-
-| Mô-đun | Vai trò |
-|--------|----------|
-| **Context 1** | Thu thập dữ liệu (Overpass API + Wikipedia) |
-| **Context 2** | Xử lý Vibe (TF-IDF + SentenceTransformer + KNN) |
-| **Context 3** | Tổng hợp điểm (thời tiết, khoảng cách, rating, cảm xúc) |
-| **Context 4** | Gợi ý cuối cùng cho người dùng |
