@@ -181,3 +181,90 @@ Các rào cản khiến việc xây dựng bộ gom cụm này trở nên thách
 * **Tính hữu ích của API (4.3.3):** API có thể trả về một cái tên "đúng" nhưng "vô dụng".
     * **Ví dụ 1 (Quá chung chung):** Trả về "Phường Bến Nghé, Quận 1" thay vì "Nhà thờ Đức Bà".
     * **Ví dụ 2 (Quá cụ thể):** Trả về "135 Đường Nam Kỳ Khởi Nghĩa" thay vì "Dinh Độc Lập".
+
+##### Design Curation Logic
+
+> **Bối cảnh vấn đề (Problem Context):**
+>
+> Sau Giai đoạn 4.3 (Gom cụm), chúng ta đã có các nhóm ảnh (VD: "Ngày 1", "Khu vực Nhà thờ Đức Bà").
+>
+> Vấn đề là các cụm này vẫn còn **"béo" (fat)**. Cụm "Khu vực Nhà thờ Đức Bà" có thể chứa 50 bức ảnh. Đây là một sự cải tiến so với 300 ảnh (ở 4.3), nhưng vẫn quá nhiều.
+>
+> Khi người dùng (Tourist) hoặc hệ thống muốn xem "tóm tắt" của cụm này, họ bị **Tê liệt vì Lựa chọn (Choice Paralysis)**. Hệ thống cần tạo một "ảnh bìa" (cover photo) cho "chương" này của câu chuyện, nhưng nó không biết chọn ảnh nào trong 50 ảnh đó.
+>
+> Họ cần một "biên tập viên" (Curation Logic) tự động xem xét tất cả 50 ảnh và **tuyển chọn** ra một bức ảnh duy nhất, **tốt nhất (Best Shot)**, để làm đại diện cho toàn bộ cụm.
+
+---
+
+## 🎯 1) Identify Stakeholders (Xác định các bên liên quan)
+
+* **Tourist (Người dùng cuối):** Người hưởng lợi chính. Họ muốn thấy bức ảnh *đẹp nhất* của họ được dùng làm ảnh bìa. Một "Best Shot" được chọn đúng (VD: ảnh selfie đẹp, ảnh phong cảnh nét) làm họ cảm thấy hài lòng. Một "Best Shot" bị chọn sai (VD: ảnh mờ, chụp lỗi) làm giảm giá trị của toàn bộ album.
+* **Hệ thống Tạo Album (Album Generation System):** "Khách hàng" nội bộ trực tiếp. Nó *cần* một `cover_image` để hiển thị trong giao diện tóm tắt album. Nó không thể tiếp tục nếu không có quyết định này.
+* **Hệ thống Chia sẻ (Sharing System):** Khi người dùng chia sẻ "Album chuyến đi Sài Gòn", bức ảnh thumbnail được dùng là gì? Đó chính là "Best Shot". Quyết định này ảnh hưởng đến cách người khác (bạn bè, gia đình) nhìn nhận về chuyến đi.
+
+---
+
+## 📈 2) Clarify Objectives (Làm rõ Mục tiêu)
+
+Mục tiêu tổng quát là tự động kiểm tra một nhóm ảnh và chọn ra một bức ảnh đại diện duy nhất có chất lượng kỹ thuật và tính thẩm mỹ cao nhất.
+
+### 01: Tối đa hóa Chất lượng Kỹ thuật (Technical Quality)
+Mục tiêu này giải quyết ví dụ "chọn ảnh nét nhất" của bạn.
+1.  **1.1 (Điểm Kỹ thuật):** "Best Shot" được chọn phải có điểm kỹ thuật tổng hợp (ví dụ: `quality_score` kết hợp từ `blur_score`, `brightness`, `exposure`) cao nhất trong cụm.
+2.  **1.2 (Loại trừ Tuyệt đối):** Phải **100%** loại bỏ các ảnh đã bị gắn cờ "rác" (từ 4.2, nếu có) hoặc các ảnh có điểm kỹ thuật cực thấp ra khỏi danh sách ứng cử viên.
+
+### 02: Tối đa hóa Sự liên quan & Thẩm mỹ (Relevance & Aesthetics)
+Đây là mục tiêu nâng cao, vượt ra ngoài "ảnh nét nhất".
+1.  **2.1 (Ưu tiên Gương mặt):** Nếu cụm ảnh chứa cả phong cảnh và con người, hệ thống nên có khả năng ưu tiên ảnh có gương mặt rõ nét, không nhắm mắt (nếu đây là mục tiêu của album).
+2.  **2.2 (Tính Đại diện):** (Rất khó) Ảnh được chọn nên đại diện cho nội dung của cụm. (VD: "Best Shot" của cụm "Nhà thờ Đức Bà" nên chứa hình ảnh nhà thờ, không chỉ là ảnh selfie cận mặt che hết nhà thờ).
+
+### 03: Tối đa hóa Hiệu suất (Performance)
+1.  **3.1 (Tốc độ Quyết định):** Quá trình chấm điểm (nếu chưa có) và so sánh để chọn "Best Shot" từ một cụm 50 ảnh phải mất **< 1 giây**.
+
+---
+
+## 📥 3) Define Inputs and Expected Outputs (Xác định Đầu vào và Đầu ra)
+
+### A. Inputs (Đầu vào)
+
+1.  **Primary Input (Đầu vào chính):**
+    * Một **Cụm ảnh (Photo Cluster)**: Đây là một `list` các đối tượng ảnh. (VD: `[imgA, imgB, imgC, ..., imgZ]`).
+2.  **Required Data per Photo (Dữ liệu bắt buộc cho mỗi ảnh):**
+    * Mỗi đối tượng ảnh trong `list` *phải* chứa các **điểm số đã được tính toán trước** (pre-computed scores).
+    * VD: `{ id: 'imgA', blur_score: 500, brightness: 150, face_count: 0 }`, `{ id: 'imgB', blur_score: 450, brightness: 120, face_count: 2 }`
+
+### B. Expected Outputs (Đầu ra Mong đợi)
+
+1.  **Primary Output (Đầu ra chính):**
+    * **Một đối tượng ảnh duy nhất (Single Photo Object)**: Đối tượng ảnh được xác định là "Best Shot" (VD: `imgA`).
+2.  **Supporting Output (Đầu ra hỗ trợ):**
+    * Hệ thống có thể *cập nhật* danh sách cụm, gắn cờ cho ảnh được chọn.
+    * VD: `imgA.is_best_shot = True`
+
+---
+
+## 🚧 4) State Constraints (Phân tích Ràng buộc)
+
+Các rào cản khiến việc xây dựng hàm `select_best_shot` này trở nên khó khăn.
+
+### 1. Ràng buộc về Tính chủ quan (Subjectivity)
+* **Đây là ràng buộc LỚN NHẤT.** "Best" (Tốt nhất) là một khái niệm hoàn toàn chủ quan.
+* **Xung đột Kỹ thuật vs. Cảm xúc:**
+    * **Ví dụ:** Thuật toán (4.4.1) sẽ chọn bức ảnh `imgA` (chụp rõ nét, đủ sáng) làm "Best Shot".
+    * Nhưng người dùng có thể *thích* bức `imgB` hơn, vì nó *hơi mờ* nhưng ghi lại khoảnh khắc mọi người đang cười rộ lên.
+    * Hàm "chọn ảnh nét nhất" của bạn sẽ thất bại trong việc nắm bắt *ý nghĩa cảm xúc* (emotional meaning), vốn là thứ quan trọng nhất trong một album kỷ niệm.
+
+### 2. Ràng buộc về Thuật toán (Algorithm)
+* **Sự phiến diện của "Điểm số":**
+    * Một hàm `quality_score` đơn giản (chỉ dựa trên độ nét + độ sáng) là không đủ.
+    * Một bức ảnh chụp một trang sách giáo khoa sẽ có `blur_score` (độ nét) và `brightness` (độ sáng) *hoàn hảo*, nhưng nó là một "Best Shot" tồi tệ.
+    * Thuật toán cần các điểm số phức tạp hơn (VD: `aesthetic_score` - điểm thẩm mỹ, `composition_score` - điểm bố cục) mà việc tính toán chúng rất tốn kém và khó chính xác.
+
+### 3. Ràng buộc về Dữ liệu (Data Dependency)
+* Hàm `select_best_shot` (4.4.1) hoàn toàn **phụ thuộc** vào chất lượng của các điểm số (`blur_score`, v.v.) được tính toán ở giai đoạn trước.
+* Nguyên lý "Rác đầu vào, Rác đầu ra" (Garbage In, Garbage Out) được áp dụng triệt để: Nếu các điểm số đầu vào bị tính sai, "Best Shot" được chọn cũng sẽ sai.
+
+### 4. Ràng buộc về Thiết kế Hệ thống (System Design)
+* **Tính toán trước vs. Tức thời:** Để đảm bảo Tốc độ (Mục tiêu 3.1), tất cả các điểm số (độ nét, độ sáng, số gương mặt) **phải** được tính toán *một lần* (có thể là ở Giai đoạn 4.2) và được lưu trữ.
+* Hàm 4.4.1 không nên *tính toán* lại độ nét. Nó chỉ nên *so sánh* các điểm số đã có. Đây là một ràng buộc về kiến trúc thiết kế của toàn bộ hệ thống.
+
