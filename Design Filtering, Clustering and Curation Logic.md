@@ -87,3 +87,97 @@ Các rào cản khiến việc xây dựng bộ lọc "ảnh rác" này trở n�
 
 ### 4. Ràng buộc về Người dùng & Trải nghiệm (User & Trust)
 * **Nỗi sợ Bị xóa nhầm (Fear of False Positives):** Như đã nêu, người dùng thà chịu bừa bộn còn hơn mất đi kỷ niệm. Hệ thống không bao giờ được phép *tự động xóa* mà không hỏi ý kiến, điều này làm giảm tính "tự động" của quy trình.
+
+##### Desing Clustering
+
+> **Bối cảnh vấn đề (Problem Context):**
+>
+> Sau khi Giai đoạn 4.2 (Lọc) hoàn thành, người dùng (Tourist) có một "Danh sách Sạch" (Clean List) gồm, ví dụ, 300 bức ảnh "tốt".
+>
+> Vấn đề hiện tại là danh sách này vẫn **phẳng (flat)**. Nó chỉ là một cuộn (scroll) dài vô tận 300 bức ảnh xếp theo thời gian. Người dùng không có cách nào để "lướt" qua chuyến đi của họ một cách có ý nghĩa.
+>
+> Họ không thể thấy "Ngày 1 chúng ta đã làm gì?" hoặc "Những ảnh chụp ở bảo tàng đâu?". Sự mệt mỏi của việc "dọn rác" (4.2) giờ được thay thế bằng sự mệt mỏi của việc "tìm kiếm" trong một danh sách sạch nhưng quá dài.
+>
+> Họ cần hệ thống tự động **phân nhóm (group)** 300 bức ảnh này thành các "chương" (chapters) hoặc "cảnh" (scenes) có ý nghĩa, dựa trên bối cảnh chúng được chụp (Thời gian và Vị trí).
+
+---
+
+## 🎯 1) Identify Stakeholders (Xác định các bên liên quan)
+
+* **Tourist (Người dùng cuối):** Người trực tiếp hưởng lợi. Họ muốn xem lại chuyến đi của mình dưới dạng một "câu chuyện" được tổ chức tốt (VD: "Ngày 1: Tham quan Nhà thờ, Ăn trưa tại Quận 1"), chứ không phải một cuộn ảnh dài.
+* **Hệ thống Tạo Câu chuyện (Story Generation System) (Giai đoạn 4.4/4.5):** Đây là "khách hàng" nội bộ. Nó *cần* dữ liệu đầu vào có cấu trúc. Nó không thể chọn "Ảnh bìa cho Ngày 1" (4.5.1) nếu nó không biết "Ngày 1" chứa ảnh nào (4.3.1). Nó không thể đặt tên "Chuyến thăm Bảo tàng" nếu nó không biết các ảnh nào thuộc về "Cụm Bảo tàng" (4.3.2).
+* **API Dịch vụ (Service APIs):** (VD: Google Maps, Nominatim). Các dịch vụ này được sử dụng trong 4.3.3 để cung cấp tên cho các cụm GPS. Họ quan tâm đến số lượng lệnh gọi API (có thể tốn chi phí).
+
+---
+
+## 📈 2) Clarify Objectives (Làm rõ Mục tiêu)
+
+Mục tiêu tổng quát là biến một danh sách ảnh phẳng, đã được lọc, thành một cấu trúc dữ liệu giàu ngữ cảnh, được tổ chức theo hai trục chính (Thời gian và Vị trí) để làm nền tảng cho việc tạo album tự động.
+
+### 01: Tổ chức theo Trục Thời gian (Time Axis - 4.3.1)
+Đây là cấu trúc điều hướng chính, giống như các "Chương" của cuốn sách.
+1.  **1.1 (Phân chia tuyệt đối):** 100% ảnh trong `Clean List` phải được gán vào một nhóm "Ngày X" (VD: "Ngày 1", "Ngày 2").
+2.  **1.2 (Ngưỡng ngày hợp lý):** Việc chuyển ngày phải hợp lý. (VD: "Ngày 1" được xác định bằng ngày của bức ảnh đầu tiên, chứ không phải ngày 1 của tháng).
+
+### 02: Tổ chức theo Trục Vị trí (Location Axis - 4.3.2)
+Đây là cấu trúc ngữ nghĩa, giống như các "Cảnh" trong một Chương.
+1.  **2.1 (Độ chính xác của Cụm):** Các cụm GPS được tạo ra phải "đúng" theo cảm nhận của con người. Các ảnh chụp tại cùng một địa điểm (VD: trong vòng 100m) phải thuộc cùng một cụm.
+2.  **2.2 (Độ bao phủ):** > 90% ảnh *có dữ liệu GPS hợp lệ* phải được gán vào một cụm vị trí (không phải "nhiễu" - cluster -1).
+3.  **2.3 (Xử lý Nhiễu):** Hệ thống phải mạnh mẽ (robust) trước các điểm dữ liệu GPS "nhiễu" (VD: ảnh chụp trên xe bus, ảnh bị trôi GPS). DBSCAN làm tốt việc này bằng cách gán chúng nhãn `-1`.
+
+### 03: Làm giàu Ngữ nghĩa (Semantic Enrichment - 4.3.3)
+Làm cho các cụm vị trí trở nên hữu ích với con người.
+1.  **3.1 (Tính hữu ích của Tên):** > 90% các cụm vị trí (VD: có > 3 ảnh) phải được gán một tên *có ý nghĩa* (VD: "Nhà thờ Đức Bà" hoặc "Khu vực đường Đồng Khởi") thay vì "Cụm 0" hoặc tọa độ `(10.77, 106.69)`.
+2.  **3.2 (Tốc độ đặt tên):** Thời gian gọi API để đặt tên cho mỗi cụm phải nhanh (VD: < 2 giây) để không làm chậm toàn bộ quá trình xử lý.
+
+---
+
+## 📥 3) Define Inputs and Expected Outputs (Xác định Đầu vào và Đầu ra)
+
+### A. Inputs (Đầu vào)
+
+1.  **Primary Input (Đầu vào chính):**
+    * `Clean List`: Một danh sách (list) các đối tượng (object) ảnh đã qua Giai đoạn 4.2.
+2.  **Required Data per Photo (Dữ liệu bắt buộc cho mỗi ảnh):**
+    * `image_id`: (Định danh duy nhất)
+    * `timestamp`: (Chuỗi ISO 8601, bắt buộc cho 4.3.1)
+    * `location`: (Một tuple `(latitude, longitude)`, bắt buộc cho 4.3.2)
+3.  **System Parameters (Tham số hệ thống):**
+    * Cho 4.3.2 (DBSCAN): `eps` (bán kính gom cụm, VD: 100 mét) và `min_samples` (số ảnh tối thiểu, VD: 3 ảnh).
+    * Cho 4.3.3: `API Key` (Khóa API cho dịch vụ Reverse Geocoding).
+
+### B. Expected Outputs (Đầu ra Mong đợi)
+
+1.  **Output 1 (cho 4.3.1): Cấu trúc theo Ngày (Day Structure)**
+    * Một cấu trúc dữ liệu (VD: dictionary/map) ánh xạ Tên Ngày với danh sách ảnh.
+    * `DayClusters = { "Ngày 1": [imgA, imgB, ...], "Ngày 2": [imgC, ...] }`
+2.  **Output 2 (cho 4.3.2): Gán nhãn Vị trí (Location Labels)**
+    * Đây *không phải* là một cấu trúc mới, mà là **sự cập nhật** cho `Clean List`.
+    * Mỗi đối tượng ảnh trong `Clean List` giờ đây có thêm một thuộc tính: `cluster_id`.
+    * `CleanList = [ {id: imgA, ts: ..., loc: ..., cluster_id: 0}, {id: imgB, ts: ..., loc: ..., cluster_id: 0}, {id: imgC, ts: ..., loc: ..., cluster_id: -1} ]`
+3.  **Output 3 (cho 4.3.3): Ánh xạ Tên Cụm (Cluster Name Map)**
+    * Một cấu trúc dữ liệu (VD: dictionary/map) ánh xạ `cluster_id` với tên do con người đọc được.
+    * `ClusterNames = { 0: "Khu vực Nhà thờ Đức Bà", 1: "Bảo tàng Chứng tích Chiến tranh", ... }`
+
+---
+
+## 🚧 4) State Constraints (Phân tích Ràng buộc)
+
+Các rào cản khiến việc xây dựng bộ gom cụm này trở nên thách thức.
+
+### 1. Ràng buộc về Dữ liệu (Data Constraints)
+* **Dữ liệu GPS bị thiếu hoặc Kém:** Đây là ràng buộc **lớn nhất**.
+    * **Trong nhà (Indoors):** Ảnh chụp trong bảo tàng, nhà hàng, khách sạn thường *không có* tín hiệu GPS. Những ảnh này sẽ không thể được gom cụm theo vị trí.
+    * **Trôi GPS (GPS Drift):** Tín hiệu GPS ở khu vực đô thị (giữa các tòa nhà cao tầng) bị "nhảy" (drift). 10 bức ảnh chụp ở cùng một ngã tư có thể bị ghi nhận ở 10 vị trí cách nhau 50m. Điều này sẽ *phá vỡ* DBSCAN.
+
+### 2. Ràng buộc về Thuật toán (Algorithm Constraints)
+* **Độ nhạy của DBSCAN (4.3.2):**
+    * Việc chọn tham số `eps` (bán kính) là cực kỳ quan trọng và khó khăn. `eps = 100m` có thể tốt ở trung tâm thành phố, nhưng quá *nhỏ* cho một khu du lịch trải rộng (VD: một bãi biển) và quá *lớn* cho một con phố (VD: gộp nhầm 3 cửa hàng khác nhau làm một).
+* **Vấn đề "Nửa đêm" (4.3.1):**
+    * Logic "chia theo ngày" rất đơn giản nhưng có thể sai. Một bữa tiệc bắt đầu lúc 10 giờ tối (Ngày 1) và kết thúc lúc 2 giờ sáng (Ngày 2) là *một* sự kiện trong mắt người dùng, nhưng hàm 4.3.1 sẽ chia nó thành *hai* ngày, phá vỡ logic "câu chuyện".
+
+### 3. Ràng buộc về Dịch vụ & Chi phí (Service & Cost Constraints)
+* **Chi phí API (4.3.3):** Dịch vụ Reverse Geocoding (như Google Maps) tính phí theo mỗi lượt gọi. Nếu một chuyến đi tạo ra 50 cụm vị trí, hệ thống sẽ phải gọi 50 lần, tốn chi phí.
+* **Tính hữu ích của API (4.3.3):** API có thể trả về một cái tên "đúng" nhưng "vô dụng".
+    * **Ví dụ 1 (Quá chung chung):** Trả về "Phường Bến Nghé, Quận 1" thay vì "Nhà thờ Đức Bà".
+    * **Ví dụ 2 (Quá cụ thể):** Trả về "135 Đường Nam Kỳ Khởi Nghĩa" thay vì "Dinh Độc Lập".
