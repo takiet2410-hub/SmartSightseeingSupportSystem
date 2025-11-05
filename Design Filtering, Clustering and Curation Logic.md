@@ -1,4 +1,4 @@
-# Desing Filtering
+# Design Filtering
 
 > **Bối cảnh vấn đề (Problem Context):**
 >
@@ -88,7 +88,7 @@ Các rào cản khiến việc xây dựng bộ lọc "ảnh rác" này trở n�
 ### 4. Ràng buộc về Người dùng & Trải nghiệm (User & Trust)
 * **Nỗi sợ Bị xóa nhầm (Fear of False Positives):** Như đã nêu, người dùng thà chịu bừa bộn còn hơn mất đi kỷ niệm. Hệ thống không bao giờ được phép *tự động xóa* mà không hỏi ý kiến, điều này làm giảm tính "tự động" của quy trình.
 
-# Desing Clustering
+# Design Clustering
 
 > **Bối cảnh vấn đề (Problem Context):**
 >
