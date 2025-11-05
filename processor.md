@@ -65,7 +65,7 @@ Pooling Layer (Mean / Max / CLS token)
 Sentence Embedding (vector ngữ nghĩa)
 ```
 
-Mỗi câu sau khi đi qua mô hình sẽ được biểu diễn bằng một vector có 384–768 chiều (tuỳ model), ví dụ `all-MiniLM-L6-v2` tạo vector 384 chiều.
+Mỗi câu sau khi đi qua mô hình sẽ được biểu diễn bằng một vector có 384–768 chiều (tuỳ model), ví dụ `multilingual-e5-base` tạo vector 384 chiều.
 
 #### ⚙️ Cơ chế hoạt động chi tiết
 
@@ -117,7 +117,7 @@ Các vector embedding được chuẩn hóa và dùng để tính **cosine simil
 Trong pipeline hiện tại:
 ```python
 from sentence_transformers import SentenceTransformer
-st = SentenceTransformer("all-MiniLM-L6-v2")
+st = SentenceTransformer("multilingual-e5-base")
 ```
 ---
 
@@ -159,106 +159,5 @@ KNN tìm **k điểm gần nhất** với vector đầu vào trong không gian c
 
 ---
 
-## 7️⃣ Code triển khai chuẩn hóa pipeline
 
-### 🔸 Import thư viện
-```python
-import pandas as pd
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import normalize
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.neighbors import NearestNeighbors
-from sentence_transformers import SentenceTransformer
-
-df = pd.DataFrame({
-    "name": ["Đà Lạt", "Nha Trang", "Hội An", "Sa Pa"],
-    "description": [
-        "yên tĩnh, nhiều cây thông, khí hậu mát mẻ, chữa lành",
-        "biển, năng động, náo nhiệt, lặn biển, vui chơi",
-        "cổ kính, yên bình, di sản, văn hóa, truyền thống",
-        "núi, lạnh, thiên nhiên, hùng vĩ, yên bình"
-    ]
-})
-```
-1. TF-IDF Vectorization
-```python
-tfidf = TfidfVectorizer(max_features=5000)
-tfidf_vecs = tfidf.fit_transform(df["description"])
-tfidf_vecs = normalize(tfidf_vecs)
-```
-2. SentenceTransformer Embedding
-```python
-st = SentenceTransformer("all-MiniLM-L6-v2")
-st_vecs = st.encode(df["description"].tolist(), convert_to_numpy=True)
-st_vecs = normalize(st_vecs)
-```
-3. Tạo Hybrid Vector
-```python
-hybrid_vecs = np.concatenate([tfidf_vecs.toarray(), st_vecs], axis=1)
-```
-4. Tạo KNN Model
-```python
-knn = NearestNeighbors(metric="cosine", n_neighbors=3)
-knn.fit(hybrid_vecs)
-```
-
-5. Vector hóa input người dùng
-```python
-user_vibe = "tôi muốn đi nơi yên bình, nhiều cây xanh, khí hậu mát mẻ"
-
-user_tfidf = tfidf.transform([user_vibe]).toarray()
-user_st = st.encode([user_vibe], convert_to_numpy=True)
-user_vec = np.concatenate([user_tfidf, user_st], axis=1)
-user_vec = normalize(user_vec)
-```
-6. Tính Cosine Similarity + KNN gợi ý
-# Cosine Similarity
-```python
-sim_scores = cosine_similarity(user_vec, hybrid_vecs).flatten()
-```
-# KNN
-```python
-distances, indices = knn.kneighbors(user_vec)
-```
-# Hiển thị kết quả
-```python
-for idx in indices[0]:
-    print(f"🏞 {df['name'][idx]} — similarity: {sim_scores[idx]:.3f}"
-```
-💡 Kết quả mẫu
-```
-🏞 Đà Lạt — similarity: 0.893
-🏞 Sa Pa — similarity: 0.752
-🏞 Hội An — similarity: 0.640
-```
-## 8️⃣ Tổng hợp công thức pipeline
-
-Độ tương đồng giữa "vibe" của người dùng và mỗi địa điểm được tính bằng **Cosine Similarity** giữa hai vector hybrid (TF-IDF + SentenceTransformer):
-
-`Sim(u, i) = cos ( [ TFIDF(u); ST(u) ], [ TFIDF(i); ST(i) ] )`
-
-
-Trong đó:
-- **u**: vector vibe của người dùng  
-- **i**: vector đặc trưng của địa điểm trong CSDL  
-- **cos**: hàm cosine similarity  
-
-Nếu sử dụng KNN để lấy *k* điểm gần nhất:
-
-`Topₖ = argsortᵢ ( 1 − Sim(u, i) )[:k]`
-
-
----
-
-## 9️⃣ Ưu điểm của mô hình hybrid
-
-| Phương pháp | Ưu điểm | Hạn chế |
-|--------------|----------|----------|
-| **TF-IDF** | Hiểu rõ từ khóa cụ thể (ví dụ “biển”, “núi”) | Không hiểu ngữ nghĩa |
-| **SentenceTransformer** | Hiểu ngữ cảnh, từ đồng nghĩa, diễn đạt tự nhiên | Tốn bộ nhớ hơn |
-| **KNN** | Truy vấn nhanh top-k điểm tương tự | Không học tham số |
-| **Cosine Similarity** | Đơn giản, hiệu quả trong không gian vector | Không mô hình hóa phi tuyến |
-
----
 
