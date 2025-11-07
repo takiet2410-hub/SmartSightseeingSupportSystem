@@ -1,11 +1,17 @@
 # Database Design & Implementation: Decomposition
 
 This document breaks down the complex problem of "Designing the Hybrid Database Schema" into smaller, manageable sub-problems, based on the project's architecture (PostgreSQL + ChromaDB + RAG).
-
 This is a **"Filter-then-Rank"** architecture. It uses **PostgreSQL** for Hard Filtering and **ChromaDB + LLM** for Soft Ranking, following a RAG (Retrieval-Augmented Generation) pattern.
 
-Summary Flow:
-Input $\rightarrow$ Step 1: Hard Filter (PostgreSQL) $\rightarrow$ (Candidate List) $\rightarrow$ Step 2: Soft Rank (ChromaDB) $\rightarrow$ (Retrieved Context) $\rightarrow$ Step 3: Generation (LLM - RAG) $\rightarrow$ Output
+**Architecture Overview:**
+
+- **PostgreSQL (Application DB):** The single source of truth for all structured, factual data (landmark details, user data).
+    
+- **ChromaDB (Search Index):** Used as two _separate_ indexes (Collections).
+    
+    1. `destination_texts`: For "Before" phase text search (RAG).
+        
+    2. `landmark_images`: For "During" phase image search.
 
 ---
 # **The Flow**
@@ -89,30 +95,30 @@ The user interacts with the Frontend and provides two types of data simultaneous
 **Problem:** Storing and filtering all structured, "factual" data (Hard Constraints).
 
 * **1.1 Define Schema (The "Blueprint")**
-    * 1.1.1 `Destinations` Table: Design the main table to hold all factual data from your spreadsheet.
-        * `landmark_id` (Primary Key, e.g., INT or VARCHAR)
-        * `name` (TEXT)
-        * `location_province` (VARCHAR)
-        * `budget_range` (VARCHAR, e.g., 'Low', 'Medium', 'High')
-        * `companion_tags` (TEXT or ARRAY[TEXT])
-        * `specific_needs_tags` (TEXT or ARRAY[TEXT])
-        * `info_summary` (TEXT) - (This is the "source" for vectorization)
-        * `vibe_tags` (TEXT) - (This is also a "source" for vectorization)
-        * `activity_tags` (TEXT) - (This is also a "source" for vectorization)
-        * `overall_rating` (FLOAT)
-        * `actionable_advice` (TEXT)
-    * 1.1.2 `Users` Table: Design for user accounts (if login is needed).
-        * `user_id` (Primary Key)
-        * `email`, `password_hash`
-    * 1.1.3 `User_Saved_Destinations` Table: Design a "join table" to link users to destinations.
-        * `user_id` (Foreign Key)
-        * `landmark_id` (Foreign Key)
-
-* **1.2 Implement & Populate**
-    * 1.2.1 Write the `CREATE TABLE` SQL scripts for the schemas defined in 1.1.
-    * 1.2.2 Write a Python "Ingestion" Script (using `psycopg2` or `SQLAlchemy`):
-        * Task: Read the `destinations_database.csv` spreadsheet.
-        * Task: Loop through each row and `INSERT` it into the `Destinations` table.
+    *   1.1.1 `Destinations` Table: This is the **single source of truth** for all landmark details.
+        
+        - `landmark_id` (Primary Key, e.g., INT or VARCHAR from Google Landmarks)
+        - `name` (TEXT) - (Used by "Before" & "During")
+        - `location_province` (VARCHAR) - (Used by "Before")
+        - `budget_range` (VARCHAR, e.g., 'Low', 'Medium', 'High') - (Used by "Before")
+        - `companion_tags` (TEXT or ARRAY[TEXT]) - (Used by "Before")
+        - `specific_needs_tags` (TEXT or ARRAY[TEXT]) - (Used by "Before")
+        - `info_summary` (TEXT) - (Source for "Before" vector, Used by "During" output)
+        - `vibe_tags` (TEXT) - (Source for "Before" vector)
+        - `activity_tags` (TEXT) - (Source for "Before" vector)
+        - `overall_rating` (FLOAT) - (Used by "Before")
+        - `actionable_advice` (TEXT) - (Used by "Before" & "During" output)
+    - 1.1.2 `Users` Table: Design for user accounts (if login is needed).
+        - `user_id` (Primary Key)
+        - `email`, `password_hash`
+    - 1.1.3 `User_Saved_Destinations` Table: Design a "join table" to link users to destinations.
+        - `user_id` (Foreign Key)
+        - `landmark_id` (Foreign Key)
+- **1.2 Implement & Populate*
+    - 1.2.1 Write the `CREATE TABLE` SQL scripts for the schemas defined in 1.1.
+    - 1.2.2 Write a Python "Ingestion" Script (using `psycopg2` or `SQLAlchemy`):
+        - Task: Read the `destinations_database.csv` spreadsheet (for "Before").
+        - Task: Loop through each row and `INSERT` it into the `Destinations` table.
 
 ---
 
@@ -199,14 +205,15 @@ The user interacts with the Frontend and provides two types of data simultaneous
 
 ## 3.0 ChromaDB: The Vector (Search Index) Database
 
-**Problem:** Storing, indexing, and retrieving vectors based on "soft" semantic similarity.
+**Problem:** Storing, indexing, and retrieving two _different types_ of vectors (Text and Image) based on similarity.
 
 * **3.1 Setup ChromaDB**
     * 3.1.1 `pip install chromadb`
     * 3.1.2 Initialize the client (e.g., Persistent Mode to save data).
     * 3.1.3 Create a "Collection" (e.g., `destination_chunks`) to store the vectors.
+    * 3.1.4 Create Collection 2 (Module "During"): `landmark_images`
 
-* **3.2 Define the Hybrid Vector Pipeline**
+* **3.2 Define the Hybrid Vector Pipeline** (Module Before)
     * 3.2.1 Implement the **TF-IDF Vectorizer**:
         * Task: `fit` the vectorizer on the *entire* text corpus (all chunks) to build its vocabulary.
     * 3.2.2 Implement the **SentenceTransformer (ST) Loader**:
@@ -215,7 +222,7 @@ The user interacts with the Frontend and provides two types of data simultaneous
         * Input: A single text chunk.
         * Output: `V_hybrid = [ V_TFIDF(chunk) ; V_ST(chunk) ]` (the 5384-dim vector).
 
-* **3.3 Storing Vectors (Ingestion)**
+* **3.3 Storing Vectors (Ingestion)** (Module Before)
     * 3.3.1 Write a script to loop through every chunk (from 2.3).
     * 3.3.2 For each chunk, generate its `V_hybrid` (using 3.2.3).
     * 3.3.3 For each chunk, retrieve its "Hard Constraint" data from PostgreSQL (Budget, Needs, etc.).
@@ -229,6 +236,19 @@ The user interacts with the Frontend and provides two types of data simultaneous
 * **3.4 Vector Indexing**
     * 3.4.1 This is handled *automatically* by ChromaDB (it uses an HNSW index).
     * 3.4.2 Confirm the distance metric: The default is Cosine Similarity, which matches your pipeline's plan. No action is needed other than verification.
+- **3.5 Module "During" Image Vector Ingestion**
+    
+    - **Problem:** Store vector representations of all images from `VN_train.csv` for fast similarity search.
+    - `3.5.1` Define Image Vectorizer: Select or train the CV model (e.g., from Roboflow, or a standard like EfficientNet/DELF) that turns an image into a vector.
+    - `3.5.2` Write a _new_ ingestion script: `ingest_image_data()`.
+    - `3.5.3` Loop & Process: This script reads `VN_train.csv` row by row.
+    - `3.5.4` Vectorize: For each row, it must (a) download the image from the `url` and (b) pass the image through the Image Vectorizer (3.5.1) to get an `image_vector`.
+    - `3.5.5` Store in ChromaDB: Add the vector to the **`landmark_images`** collection:
+        - `collection.add(`
+        - `embeddings=[ image_vector ],`
+        - `metadatas=[{ "landmark_id": row.landmark_id, "image_id": row.id }],`
+        - `ids=[ row.id ]`
+        - `)`
 
 ---
 
@@ -262,3 +282,5 @@ The user interacts with the Frontend and provides two types of data simultaneous
     * 4.4.2 Retrieve their full `info_summary` from **PostgreSQL**.
     * 4.4.3 Format these summaries as "Context" and build the prompt for the LLM (Llama 3).
     * 4.4.4 Write the function to call the LLM API and return the final answer.
+
+
