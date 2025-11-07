@@ -27,19 +27,19 @@ This section outlines the tasks for each member and their corresponding Git bran
 | Feature / Task                                                                                                          | Assigned To         | Student ID | Branch Name                            | Status        |
 | :---------------------------------------------------------------------------------------------------------------------- | :------------------ | :--------- | :------------------------------------- | :------------ |
 | **Analysis**                                                                                                            |                     |            |                                        |               |
-| Design Database Schema                                                                                                  | Trần Anh Kiệt       | `24127287` | `24127287_Database_Schema`             | [In Progress] |
+| Design Database Schema                                                                                                  | Trần Anh Kiệt       | `24127287` | `24127287_Database_Schema`             | [Finished] |
 | **Module Before**                                                                                                       |                     |            |                                        |               |
-| Design algorithm (content-based filtering, constraint application, scoring).                                            | Trần Đức Quý        | `24127526` | `24127526_Design_Algorithm`            | [In Progress] |
-| Implement preference matching and scoring (tag overlap, term frequency inverse document frequency + cosine similarity). | Nguyễn Quốc Dương   | `24127349` | `24127349_Abstract_Interest_Processor` | [In Progress] |
-| Implement ranking and output formatting (Top-N result generation).                                                      | Trần Anh Kiệt       | `24127287` | `24127287_Ranking_Output`              | [Not Started] |
+| Design algorithm (content-based filtering, constraint application, scoring).                                            | Trần Đức Quý        | `24127526` | `24127526_Design_Algorithm`            | [Finished] |
+| Implement preference matching and scoring (tag overlap, term frequency inverse document frequency + cosine similarity). | Nguyễn Quốc Dương   | `24127349` | `24127349_Abstract_Interest_Processor` | [Finished] |
+| Implement ranking and output formatting (Top-N result generation).                                                      | Trần Anh Kiệt       | `24127287` | `24127287_Ranking_Output`              | [Finished] |
 | **Module During**                                                                                                       |                     |            |                                        |               |
-| Design filename-to-landmark mapping and mock GPS filtering logic.                                                       | Nguyễn Tiến Phát    | `24127098` | `24127098_Image_Handling`              | [In Progress] |
-| CV API Integration                                                                                                      | Lưu Minh Quân       | `24127223` | `24127223_CV_Integration`              | [In Progress] |
-| Implement information retrieval for matched landmarks.                                                                  | Trần Anh Kiệt       | `24127287` | `24127287_Info_Retrieval`              | [In Progress] |
+| Design filename-to-landmark mapping and mock GPS filtering logic.                                                       | Nguyễn Tiến Phát    | `24127098` | `24127098_Image_Handling`              | [Finished] |
+| CV API Integration                                                                                                      | Lưu Minh Quân       | `24127223` | `24127223_CV_Integration`              | [Finished] |
+| Implement information retrieval for matched landmarks.                                                                  | Trần Anh Kiệt       | `24127287` | `24127287_Info_Retrieval`              | [Finished] |
 | **Module After**                                                                                                        |                     |            |                                        |               |
-| Design Metadata Extractor                                                                                               | Phan Đình Minh Quân | `24127517` | `24127517_Metadata_Extractor`          | [In Progress] |
-| Design Filtering, Clustering and Curation Logic                                                                         | La Anh Hào          | `24127361` | `24127361_Image_Handling_Logic`        | [In Progress] |
-| Album Generation                                                                                                        | Trần Anh Kiệt       | `24127287` | `24127287_Album_Generation`            | [In Progress] |
+| Design Metadata Extractor                                                                                               | Phan Đình Minh Quân | `24127517` | `24127517_Metadata_Extractor`          | [Finished] |
+| Design Filtering, Clustering and Curation Logic                                                                         | La Anh Hào          | `24127361` | `24127361_Image_Handling_Logic`        | [Finished] |
+| Album Generation                                                                                                        | Trần Anh Kiệt       | `24127287` | `24127287_Album_Generation`            | [Finished] |
 
 ---
 
