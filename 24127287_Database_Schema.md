@@ -108,6 +108,7 @@ The user interacts with the Frontend and provides two types of data simultaneous
         - `activity_tags` (TEXT) - (Source for "Before" vector)
         - `overall_rating` (FLOAT) - (Used by "Before")
         - `actionable_advice` (TEXT) - (Used by "Before" & "During" output)
+        - `google_mid` (VARCHAR UNIQUE) - (Used by during)
     - 1.1.2 `Users` Table: Design for user accounts (if login is needed).
         - `user_id` (Primary Key)
         - `email`, `password_hash`
