@@ -1,0 +1,19 @@
+# --- Core Framework ---
+fastapi[all]
+uvicorn[standard]
+pydantic-settings
+
+# --- Database & Storage ---
+pymongo
+
+# --- AI & RAG Pipeline ---
+pandas
+scikit-learn
+sentence-transformers
+joblib
+
+# --- LangChain 
+langchain
+langchain-community
+langchain-text-splitters
+langchain-ollama
