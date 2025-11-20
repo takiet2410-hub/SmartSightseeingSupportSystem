@@ -28,7 +28,6 @@ def build_rag_prompt(context: str, user_query: str) -> str:
                 "rank": 1,
                 "name": "Tên địa điểm 1",
                 "justification_summary": "Giải thích ngắn gọn (dưới 150 từ) tại sao phù hợp...",
-                "estimated_budget": "...",
                 "suggested_activities": ["...", "..."]
             }},
             {{

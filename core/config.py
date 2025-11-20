@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     LLM_MODEL_NAME: str
 
     # Data paths
-    CSV_FILE_PATH: str
     VECTORIZER_PATH: str
+    EXCEL_FILE_PATH: str
 
 # Khởi tạo một instance để các file khác có thể import
 settings = Settings()

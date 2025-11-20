@@ -2,6 +2,7 @@
 fastapi[all]
 uvicorn[standard]
 pydantic-settings
+openpyxl
 
 # --- Database & Storage ---
 pymongo
@@ -11,6 +12,7 @@ pandas
 scikit-learn
 sentence-transformers
 joblib
+hf_xet
 
 # --- LangChain 
 langchain
