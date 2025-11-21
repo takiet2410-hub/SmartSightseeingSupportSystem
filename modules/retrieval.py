@@ -17,7 +17,8 @@ def build_mongo_aggregation(hard_constraints: HardConstraints, query_vector: Lis
         filter_conditions["companion_tag"] = {"$eq": hard_constraints.companion_tag}
     if hard_constraints.season_tag:
         filter_conditions["season_tag"] = {"$eq": hard_constraints.season_tag}
-        
+    if hard_constraints.location_province:
+        filter_conditions["location_province"] = {"$eq": hard_constraints.location_province}
     search_filter = filter_conditions if filter_conditions else None
 
     # 2. Vector Search Stage

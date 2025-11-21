@@ -3,6 +3,7 @@ from schemas import RecommendationRequest, RecommendationResponse
 from modules.vectorizer import HybridVectorizer
 from modules.retrieval import retrieve_context
 from modules.generation import build_rag_prompt, call_llm_api, parse_llm_response
+from modules.weather import get_current_weather
 from core.config import settings
 from contextlib import asynccontextmanager
 import unicodedata
@@ -11,47 +12,44 @@ import os
 # Khởi tạo vectorizer toàn cục
 vectorizer = HybridVectorizer()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("--- STARTUP: Loading models ---")
-    try:
-        # Kiểm tra xem file vectorizer có tồn tại không
-        if os.path.exists(settings.VECTORIZER_PATH):
-            vectorizer.load_fitted_tfidf(settings.VECTORIZER_PATH)
-            print("Models loaded successfully.")
-        else:
-            print(f"Không tìm thấy file vectorizer tại: {settings.VECTORIZER_PATH}")
-            print("👉 Bạn cần chạy lệnh 'python ingest_data.py' để tạo file này trước.")
-            
-    except Exception as e:
-        print(f"❌ CRITICAL ERROR during startup: {e}")
-    
-    
-    yield
-    print("--- SHUTDOWN ---")
-    
-app = FastAPI(
-    title="Smart Tourism System - 'Before' Module",
-    lifespan=lifespan
-)
+# --- Helper: Chuẩn hóa chuỗi để so sánh tên (Khắc phục lỗi hoa/thường) ---
+def normalize_key(text: str) -> str:
+    """
+    Chuyển về chữ thường, bỏ khoảng trắng thừa, chuẩn hóa Unicode.
+    Dùng để làm key trong Map tra cứu.
+    """
+    if not text: return ""
+    return unicodedata.normalize('NFC', str(text)).strip().lower()
 
-# 2. HÀM CHUẨN HÓA INPUT (LOGIC Y HỆT BÊN INGEST)
 def standardize_input(text: str) -> str:
     if not text:
-        return None # Trả về None để filter bỏ qua nếu user không nhập
+        return None 
     text = str(text)
     text = unicodedata.normalize('NFC', text)
     text = text.replace('\u2013', '-').replace('\u2014', '-')
     return text.strip().lower()
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Smart Tourism 'Before' Module API"}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("--- STARTUP: Loading models ---")
+    try:
+        if os.path.exists(settings.VECTORIZER_PATH):
+            vectorizer.load_fitted_tfidf(settings.VECTORIZER_PATH)
+            print("Models loaded successfully.")
+        else:
+            print(f"WARNING: Không tìm thấy file vectorizer tại: {settings.VECTORIZER_PATH}")
+            
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR during startup: {e}")
+    yield
+    print("--- SHUTDOWN ---")
+    
+app = FastAPI(title="Smart Tourism System", lifespan=lifespan)
 
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
     try:
-        # 1. Chuẩn hóa input (như đã sửa ở bước trước)
+        # 1. Chuẩn hóa input
         if request.hard_constraints:
             req = request.hard_constraints
             req.available_time = standardize_input(req.available_time)
@@ -61,7 +59,7 @@ async def get_recommendations(request: RecommendationRequest):
         
         print(f"Received query: {request.vibe_prompt}")
         
-        # 2. Vector Search & Retrieval
+        # 2. Retrieval
         query_vector = vectorizer.transform_single(request.vibe_prompt)
         retrieved_context = retrieve_context(request.hard_constraints, query_vector)
         
@@ -72,50 +70,61 @@ async def get_recommendations(request: RecommendationRequest):
                 debug_info={"message": "No destinations found matching criteria."}
             )
 
-        # 3. Tạo Dictionary để tra cứu nhanh (Name -> Full Data)
-        # Mục đích: Lấy lại địa chỉ, rating chính xác từ DB mà không cần LLM sinh ra
-        context_map = {doc['name']: doc for doc in retrieved_context}
+        # 3. TẠO MAP TRA CỨU THÔNG MINH (QUAN TRỌNG)
+        # Key của map sẽ là tên đã chuẩn hóa (lowercase). 
+        # Ví dụ: "vinwonders nha trang" -> Document Gốc
+        context_map = {normalize_key(doc['name']): doc for doc in retrieved_context}
 
-        # 4. Gọi LLM để chọn và viết lời bình
+        # 4. Gọi LLM
         context_str = "\n\n".join([str(doc) for doc in retrieved_context])
         prompt = build_rag_prompt(context=context_str, user_query=request.vibe_prompt)
         llm_raw_response = call_llm_api(prompt)
         parsed_response = parse_llm_response(llm_raw_response)
         
         if "error" in parsed_response:
-             raise HTTPException(status_code=500, detail=parsed_response["error"])
+             # Fallback: Nếu LLM lỗi JSON, trả về top 3 từ DB luôn
+             print("LLM Error, using fallback.")
+             parsed_response["recommendations"] = [{"name": doc["name"], "rank": i+1, "justification_summary": "Gợi ý tự động."} for i, doc in enumerate(retrieved_context[:3])]
 
-        # 5. === BƯỚC QUAN TRỌNG: GHÉP DỮ LIỆU (DATA ENRICHMENT) ===
+        # 5. === DATA ENRICHMENT (GHÉP DỮ LIỆU CHÍNH XÁC TỪ DB) ===
         llm_recs = parsed_response.get("recommendations", [])
         final_recommendations = []
 
         for rec in llm_recs:
-            # Tìm lại doc gốc trong context dựa vào tên
-            original_doc = context_map.get(rec.get("name"))
+            # Lấy tên do LLM sinh ra
+            llm_name = rec.get("name", "")
+            # Chuẩn hóa tên đó (lowercase) để tìm trong Map
+            lookup_key = normalize_key(llm_name)
+            
+            # Tra cứu vào dữ liệu gốc
+            original_doc = context_map.get(lookup_key)
             
             if original_doc:
-                # Nếu tìm thấy, copy thông tin cứng từ DB sang
+                # Ghi đè lại tên bằng tên chuẩn trong DB (để sửa lỗi hoa/thường của LLM)
+                rec["name"] = original_doc["name"] 
                 rec["location_province"] = original_doc.get("location_province", "Unknown")
                 rec["specific_address"] = original_doc.get("specific_address", "Unknown")
-                rec["overall_rating"] = original_doc.get("overall_rating", 0.0)
+                rec["overall_rating"] = float(original_doc.get("overall_rating", 0.0))
                 rec["image_urls"] = original_doc.get("image_urls", [])
+                
+                #Gọi API OpenWeather
+                province = original_doc.get("location_province", "")
+                clean_province = province.replace("Tỉnh", "").replace("Thành phố", "").strip()
+                weather_data = await get_current_weather(clean_province)
+                rec["weather"] = weather_data
+                
+                final_recommendations.append(rec)
             else:
-                # Fallback: Nếu LLM bịa tên hoặc sửa tên làm không tìm thấy trong map
-                # Gán giá trị mặc định để tránh lỗi 500
-                rec["location_province"] = ""
-                rec["specific_address"] = ""
-                rec["overall_rating"] = 0.0
-                rec["image_urls"] = []
-            
-            final_recommendations.append(rec)
+                print(f"⚠️ Mismatch: LLM generated '{llm_name}' but DB keys are: {list(context_map.keys())}")
+                # Chỉ thêm vào nếu thực sự cần thiết, hoặc bỏ qua
+                # Ở đây ta chọn bỏ qua để tránh hiển thị dữ liệu rác
+                continue
 
-        # 6. Trả về kết quả đã đầy đủ field
         return RecommendationResponse(
             status="success",
             recommendations=final_recommendations,
             debug_info={
                 "retrieved_count": len(retrieved_context), 
-                # Lấy score của thằng đầu tiên tìm thấy (nếu có)
                 "top_match_score": retrieved_context[0].get('score') if retrieved_context else 0
             }
         )

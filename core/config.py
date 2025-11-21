@@ -9,12 +9,15 @@ class Settings(BaseSettings):
     DESTINATIONS_COLLECTION: str
     
     # LLM
-    OLLAMA_BASE_URL: str
-    LLM_MODEL_NAME: str
+    GEMINI_API_KEY: str 
+    GEMINI_MODEL_NAME: str
 
     # Data paths
     VECTORIZER_PATH: str
     EXCEL_FILE_PATH: str
+    
+    # OpenWeather
+    OPENWEATHER_API_KEY: str
 
 # Khởi tạo một instance để các file khác có thể import
 settings = Settings()
