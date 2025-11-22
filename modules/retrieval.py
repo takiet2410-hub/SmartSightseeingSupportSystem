@@ -31,7 +31,7 @@ def build_mongo_aggregation(hard_constraints: HardConstraints, query_vector: Lis
             "index": "vector_index", 
             "path": "v_hybrid",       
             "queryVector": query_vector,
-            "numCandidates": 100, 
+            "numCandidates": 1000, 
             "limit": candidates_pool_size, # Lấy tập ứng viên rộng hơn
         }
     }

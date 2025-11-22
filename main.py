@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from schemas import RecommendationRequest, RecommendationResponse
 from modules.vectorizer import HybridVectorizer
 from modules.retrieval import retrieve_context
@@ -46,6 +47,13 @@ async def lifespan(app: FastAPI):
     
 app = FastAPI(title="Smart Tourism System", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Cho phép mọi nguồn (Frontend) truy cập
+    allow_credentials=True,
+    allow_methods=["*"], # Cho phép mọi phương thức (POST, GET...)
+    allow_headers=["*"], # Cho phép mọi header
+)
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
     try:
@@ -106,7 +114,8 @@ async def get_recommendations(request: RecommendationRequest):
                 rec["specific_address"] = original_doc.get("specific_address", "Unknown")
                 rec["overall_rating"] = float(original_doc.get("overall_rating", 0.0))
                 rec["image_urls"] = original_doc.get("image_urls", [])
-                
+                rec["description"] = original_doc.get("description","Unknown")
+
                 #Gọi API OpenWeather
                 province = original_doc.get("location_province", "")
                 clean_province = province.replace("Tỉnh", "").replace("Thành phố", "").strip()

@@ -44,19 +44,19 @@ def build_rag_prompt(context: str, user_query: str) -> str:
             {{
                 "rank": 1,
                 "name": "Tên y hệt trong Context",
-                "justification_summary": "Giải thích ngắn gọn, hấp dẫn bằng tiếng Việt",
+                "justification_summary": "Giải thích lý do chọn địa điểm này dựa trên context bằng tiếng Việt",
                 "suggested_activities": ["Hoạt động 1 (Tiếng Việt)", "Hoạt động 2"]
             }},
              {{
                 "rank": 2,
                 "name": "Tên y hệt trong Context",
-                "justification_summary": "Giải thích ngắn gọn, hấp dẫn bằng tiếng Việt",
+                "justification_summary": "Giải thích lý do chọn địa điểm này dựa trên context bằng tiếng Việt",
                 "suggested_activities": ["Hoạt động 1 (Tiếng Việt)", "Hoạt động 2"]
             }},
              {{
                 "rank": 3,
                 "name": "Tên y hệt trong Context",
-                "justification_summary": "Giải thích ngắn gọn, hấp dẫn bằng tiếng Việt",
+                "justification_summary": "Giải thích lý do chọn địa điểm này dựa trên context bằng tiếng Việt",
                 "suggested_activities": ["Hoạt động 1 (Tiếng Việt)", "Hoạt động 2"]
             }}
         ]
