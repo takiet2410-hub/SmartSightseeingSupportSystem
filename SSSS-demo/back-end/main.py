@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     
 app = FastAPI(title="Smart Tourism System", lifespan=lifespan)
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Cho phép mọi nguồn (Frontend) truy cập
@@ -54,6 +55,11 @@ app.add_middleware(
     allow_methods=["*"], # Cho phép mọi phương thức (POST, GET...)
     allow_headers=["*"], # Cho phép mọi header
 )
+
+@app.get("/")
+def read_root():
+    return {"status": "Running", "message": "Welcome to Smart Tourism API. Go to /docs for API documentation."}
+
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
     try:
