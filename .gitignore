@@ -1,0 +1,16 @@
+# --- Python / Backend ---
+SSSS-demo/back-end/venv/
+SSSS-demo/back-end/__pycache__/
+*.pyc
+SSSS-demo/back-end/.env
+SSSS-demo/.env
+
+# --- Node / Frontend ---
+front-end/node_modules/
+front-end/dist/
+front-end/.env
+front-end/.env.local
+
+# --- System ---
+.DS_Store
+Thumbs.db
