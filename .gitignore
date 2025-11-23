@@ -1,0 +1,8 @@
+# Ignore Visual Studio Code settings folder
+.vscode/
+
+# Ignore benchmark results
+.benchmarks/
+
+# Ignore documentation folder
+.docs/
