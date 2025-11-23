@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sentence-transformers
+torch
+transformers
+pymongo
+python-dotenv
+Pillow
+numpy
