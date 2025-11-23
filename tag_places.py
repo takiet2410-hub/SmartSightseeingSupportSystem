@@ -5,7 +5,7 @@ import random
 # CẤU HÌNH CƠ BẢN
 # =========================
 # Đổi tên file INPUT_FILE cho đúng với file của bạn
-INPUT_FILE = "landmarks.xlsx"          # ví dụ: "landmarks.xlsx"
+INPUT_FILE = r"vl.xlsx"          # ví dụ: "landmarks.xlsx"
 PLACE_COL  = "name"                    # tên cột chứa tên địa điểm
 
 COMPANION_COL = "companion_tags"
@@ -19,7 +19,7 @@ COMPANION_CHOICES = ["Cặp đôi", "Gia đình", "Một mình", "Nhóm bạn b�
 SEASON_CHOICES = ["Xuân", "Hạ", "Thu", "Đông", "Quanh năm"]
 ACTIVITY_CHOICES = [
     "leo núi", "ngắm cảnh", "biểu tượng", "hồ", "thiên nhiên",
-    "chèo thuyền", "kỳ thú", "check-in", "phiêu lưu", "yên tĩnh", "thân thiện"
+    "chèo thuyền", "kỳ thú", "check-in", "mua sắm","phiêu lưu", "yên tĩnh", "thân thiện"
 ]
 
 # =========================
@@ -31,22 +31,23 @@ def choose_companion(name: str) -> str:
 
     # Tâm linh, lịch sử
     if any(k in n for k in ["chùa", "đền", "nhà thờ", "miếu", "lăng", "mộ", "nghĩa trang", "thánh", "thánh địa"]):
-        return random.choice(["Cặp đôi", "Một mình"])
+        return "Một mình"          # hoặc "Cặp đôi", bạn chọn 1 giá trị cố định
 
     # Công viên, khu vui chơi, khu du lịch, vườn, safari
     if any(k in n for k in ["công viên", "khu du lịch", "khu sinh thái", "vui chơi", "safari", "vinpearl", "thảo cầm viên", "vườn thú"]):
-        return random.choice(["Gia đình", "Nhóm bạn bè"])
+        return "Gia đình"
 
     # Núi, thác, hang, rừng, cao nguyên, vườn quốc gia
     if any(k in n for k in ["núi", "thác", "đèo", "hang", "động", "rừng", "cao nguyên", "vườn quốc gia"]):
-        return random.choice(["Nhóm bạn bè", "Gia đình"])
+        return "Nhóm bạn bè"
 
     # Chợ, phố đi bộ, phố cổ, khu phố
     if any(k in n for k in ["chợ", "phố đi bộ", "phố cổ", "khu phố"]):
-        return random.choice(["Nhóm bạn bè", "Cặp đôi"])
+        return "Nhóm bạn bè"
 
     # Mặc định
-    return random.choice(COMPANION_CHOICES)
+    return "Cặp đôi"
+
 
 # =========================
 # HÀM GẮN season_tags
@@ -55,27 +56,21 @@ def choose_companion(name: str) -> str:
 def choose_season(name: str) -> str:
     n = name.lower()
 
-    # Lễ hội: KHÔNG chọn "Quanh năm" – ưu tiên Xuân, một phần Thu
+    # Lễ hội: ưu tiên Xuân (hard rule)
     if "lễ hội" in n:
-        return random.choices(
-            ["Xuân", "Thu"],
-            weights=[0.7, 0.3]
-        )[0]
+        return "Xuân"
 
-    # Có chữ "hoa": KHÔNG chọn "Quanh năm" – Xuân nhiều nhất
+    # Có chữ "hoa": chỉ Xuân (cho chắc), nếu muốn có thể Thu cũng được
     if "hoa" in n:
-        return random.choices(
-            ["Xuân", "Hạ", "Thu"],
-            weights=[0.6, 0.2, 0.2]
-        )[0]
+        return "Xuân"
 
-    # Biển, đảo, vịnh, bãi, cồn, phá → Hạ
+    # Biển, đảo, vịnh, bãi, cồn, phá
     if any(k in n for k in ["biển", "bãi", "vịnh", "đảo", "cồn", "phá"]):
         return "Hạ"
 
     # Núi, đèo, cao nguyên, thác, rừng, vườn quốc gia
     if any(k in n for k in ["núi", "đèo", "cao nguyên", "thác", "rừng", "vườn quốc gia"]):
-        return random.choice(["Xuân", "Thu", "Quanh năm"])
+        return "Thu"
 
     # Thành phố, bảo tàng, quảng trường, nhà hát, trung tâm, cung
     if any(k in n for k in ["thành phố", "phố", "bảo tàng", "quảng trường", "nhà hát", "trung tâm", "cung"]):
@@ -114,7 +109,7 @@ def choose_activity_tags(name: str) -> str:
 
     # Làng, bản, chợ, phố cổ, làng nghề
     if any(k in n for k in ["làng", "bản", "chợ", "phố cổ", "phố", "làng nghề"]):
-        tags.update(["thân thiện", "check-in", "ngắm cảnh"])
+        tags.update(["thân thiện", "check-in", "ngắm cảnh", "mua sắm"])
 
     # Chùa, đền, nhà thờ, miếu, lăng, di tích, thánh địa
     if any(k in n for k in ["chùa", "đền", "nhà thờ", "miếu", "lăng", "di tích", "thánh địa"]):
@@ -122,7 +117,7 @@ def choose_activity_tags(name: str) -> str:
 
     # Công viên, khu du lịch, khu sinh thái, khu vui chơi, resort
     if any(k in n for k in ["công viên", "khu du lịch", "khu sinh thái", "khu vui chơi", "resort", "safari"]):
-        tags.update(["check-in", "thân thiện", "ngắm cảnh"])
+        tags.update(["check-in", "thân thiện", "ngắm cảnh", "mua sắm"])
 
     # Nếu chưa match gì → coi là điểm ngắm cảnh / check-in
     if not tags:
