@@ -1,102 +1,118 @@
+import pandas as pd
+from core.config import settings
+from core.db import get_db_collection
+from modules.vectorizer import HybridVectorizer
+import sys
 import os
+from typing import List
+import unicodedata  
 
-# ==============================================================================
-# RESULTS PAGE (SẠCH - KHÔNG CÒN MOCK DATA)
-# ==============================================================================
-results_before_jsx = """
-import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import PlaceModal from '../../components/PlaceModal';
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-const ResultsBeforePage = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  
-  // Lấy dữ liệu trực tiếp từ Backend gửi sang
-  // Nếu không có data, mặc định là mảng rỗng []
-  const results = location.state?.data || [];
-  const [selected, setSelected] = useState(null);
+def clean_split_tags(tag_string):
+    if not isinstance(tag_string, str):
+        return []
+    return [t.strip() for t in tag_string.split(',') if t.strip()]
 
-  // Hàm hiển thị ảnh an toàn (Chỉ giữ lại logic ảnh default nếu link lỗi/thiếu)
-  const getValidImage = (place) => {
-    if (place.image_urls && place.image_urls.length > 0) return place.image_urls[0];
-    // Ảnh placeholder đẹp nếu không có ảnh
-    return "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200"; 
-  };
+# 2. HÀM CHUẨN HÓA DỮ LIỆU 
+def standardize_text(text):
+    """
+    - Chuyển về str.
+    - Chuẩn hóa Unicode NFC (tránh lỗi font).
+    - Thay thế gạch ngang Excel (–) bằng gạch thường (-).
+    - Chuyển về chữ thường (lowercase).
+    - Xóa khoảng trắng thừa.
+    """
+    if not text:
+        return ""
+    text = str(text)
+    # Chuẩn hóa Unicode (NFC)
+    text = unicodedata.normalize('NFC', text)
+    # Thay thế các loại dấu gạch ngang lạ
+    text = text.replace('\u2013', '-').replace('\u2014', '-')
+    return text.strip().lower()
 
-  return (
-    <div className="results-container" style={{padding: '4rem'}}>
-      <div className="results-header">
-        <button className="btn-back" onClick={() => navigate('/recommend')}>
-            <span>←</span> Chỉnh sửa kế hoạch
-        </button>
-        <h2 style={{fontFamily:'Merriweather', fontSize:'2.2rem', color: 'white', margin:0, textAlign:'center', flex:1}}>
-            Gợi Ý Tốt Nhất Cho Bạn
-        </h2>
-        <div style={{width:'180px'}}></div>
-      </div>
+def get_corpus(df: pd.DataFrame) -> List[str]:
+    corpus = []
+    for _, row in df.iterrows():
+        text_chunk = (
+            f"Name: {row.get('name', '')}. "
+            f"Location: {row.get('location_province', '')}, {row.get('specific_address', '')}. "
+            f"Rating: {row.get('overall_rating', '')}/5. " 
+            f"Description: {row.get('info_summary', '')}. "
+            f"Tags: {row.get('activity_tags & vibe_tags (Combined_tags)', '')}. "
+            f"Season: {row.get('season_tags', '')}."
+        )
+        corpus.append(text_chunk)
+    return corpus
 
-      {/* Kiểm tra nếu có kết quả thì hiển thị, không thì báo lỗi */}
-      {results.length > 0 ? (
-        <div className="results-grid">
-            {results.map((place, i) => (
-            <div key={i} className="travel-card" onClick={() => setSelected(place)}>
-                <div className="card-img-wrapper">
-                    <span className="rank-tag">Top #{place.rank || i + 1}</span>
-                    <div className="rating-badge">⭐ {place.overall_rating || 4.5}/5</div>
-                    <img 
-                        src={getValidImage(place)} 
-                        className="card-img" 
-                        alt={place.name} 
-                        onError={(e) => e.target.src = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200"}
-                    />
-                </div>
-                <div className="travel-card-body">
-                    <h3 className="card-title">{place.name}</h3>
-                    <div className="location">📍 {place.location_province}</div>
-                    
-                    <p className="desc">
-                        {place.justification_summary || place.description}
-                    </p>
-                    
-                    <div className="card-footer">
-                        <span className="view-btn">Xem Chi Tiết →</span>
-                    </div>
-                </div>
-            </div>
-            ))}
-        </div>
-      ) : (
-        <div style={{textAlign: 'center', marginTop: '5rem', color: '#94a3b8'}}>
-            <h3 style={{fontSize: '2rem', marginBottom: '1rem'}}>😕 Không tìm thấy địa điểm nào</h3>
-            <p>Backend chưa trả về dữ liệu hoặc không có địa điểm phù hợp với bộ lọc.</p>
-            <button 
-                onClick={() => navigate('/recommend')}
-                style={{
-                    marginTop: '2rem', padding: '10px 25px', 
-                    background: 'var(--primary)', border: 'none', 
-                    color: 'white', borderRadius: '50px', cursor: 'pointer', fontWeight: 'bold'
-                }}
-            >
-                Thử lại ngay
-            </button>
-        </div>
-      )}
-      
-      <PlaceModal place={selected} onClose={() => setSelected(null)} />
-    </div>
-  );
-};
-export default ResultsBeforePage;
-"""
+def run_ingestion():
+    print("Starting data ingestion...")
+    collection = get_db_collection()
+    
+    if collection is None:
+        print("Database connection failed.")
+        return
 
-# --- GHI FILE ---
-def remove_mock():
-    path = "src/pages/modules/ResultsBeforePage.jsx"
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(results_before_jsx.strip())
-    print(f"✅ Updated: {path} (MOCK DATA REMOVED)")
+    file_path = settings.EXCEL_FILE_PATH 
+    print(f"Reading data from: {file_path}")
+
+    try:
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+        else:
+            df = pd.read_excel(file_path, engine='openpyxl')
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return
+
+    # Xử lý rating
+    df['overall_rating'] = pd.to_numeric(df['overall_rating'], errors='coerce').fillna(0.0)
+    df = df.fillna('') 
+
+    corpus = get_corpus(df)
+    vectorizer = HybridVectorizer()
+    vectorizer.fit(corpus) 
+    
+    documents_to_insert = []
+    
+    print(f"Processing {len(df)} rows...")
+    for index, row in df.iterrows():
+        text_chunk = corpus[index] 
+        hybrid_vector = vectorizer.transform_single(text_chunk) 
+        
+        combined_tags = clean_split_tags(row.get('activity_tags & vibe_tags (Combined_tags)', ''))
+        
+        doc = {
+            "landmark_id": str(row.get('landmark_id')), 
+            "name": row.get('name'),
+            "text_chunk": text_chunk, 
+            "v_hybrid": hybrid_vector, 
+            
+            "location_province": str(row.get('location_province', '')).strip(),
+            "specific_address": str(row.get('specific_address', '')).strip(),
+            "overall_rating": float(row.get('overall_rating', 0.0)),
+            
+            # === 3. ÁP DỤNG CHUẨN HÓA CHO CÁC TRƯỜNG FILTER ===
+            # Dữ liệu vào DB sẽ sạch sẽ: "1-2 giờ", "thấp", "mùa hè" (lowercase, chuẩn dấu)
+            "budget_range": standardize_text(row.get('budget_range', '')), 
+            "available_time": standardize_text(row.get('available_time_needed', '')),
+            "companion_tag": standardize_text(row.get('companion_tags', '')),
+            "season_tag": standardize_text(row.get('season_tags', '')),
+            # ==================================================
+
+            "combined_tags_array": combined_tags,
+            "description": row.get('info_summary'),
+            "image_urls": str(row.get('image_urls', '')).split(';')
+        }
+        
+        documents_to_insert.append(doc)
+
+    if documents_to_insert:
+        print(f"Inserting {len(documents_to_insert)} documents into MongoDB...")
+        collection.delete_many({}) 
+        collection.insert_many(documents_to_insert) 
+        print("Ingestion complete. Data is now CLEAN and NORMALIZED.") 
 
 if __name__ == "__main__":
-    remove_mock()
-    print("\\n✨ Xong! Bây giờ Frontend hoàn toàn phụ thuộc vào Backend.")
+    run_ingestion()
