@@ -4,5 +4,8 @@
 # Ignore benchmark results
 .benchmarks/
 
-# Ignore documentation folder
-.docs/
+# Ignore pycache files
+__pycache__/
+*.pyc
+
+test_photos
