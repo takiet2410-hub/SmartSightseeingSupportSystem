@@ -88,7 +88,7 @@ async def get_recommendations(request: RecommendationRequest):
         # Key của map sẽ là tên đã chuẩn hóa (lowercase). 
         # Ví dụ: "vinwonders nha trang" -> Document Gốc
         context_map = {normalize_key(doc['name']): doc for doc in retrieved_context}
-
+        print(context_map)
         # 4. Gọi LLM
         context_str = "\n\n".join([str(doc) for doc in retrieved_context])
         prompt = build_rag_prompt(context=context_str, user_query=request.vibe_prompt)
