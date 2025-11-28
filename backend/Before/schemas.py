@@ -33,11 +33,11 @@ class RecommendedDestination(BaseModel):
     specific_address: str = Field(default="", description="Địa chỉ chi tiết")
     overall_rating: float = Field(default=0.0, description="Điểm đánh giá trung bình")
     image_urls: List[str] = Field(default=[], description="Danh sách đường dẫn ảnh")
-    description: str = Field(default = "...", description = "Thông tin chi tiết về địa điểm")
     
     #Thông tin từ LLM (Reasoning)
     justification_summary: str = Field(default="Gợi ý dựa trên sự phù hợp của bạn.", description="Lời giải thích tại sao địa điểm này phù hợp")
     suggested_activities: List[str] = Field(default=[], description="Danh sách các hoạt động gợi ý")
+    description: str = Field(default = "...", description = "Thông tin chi tiết về địa điểm")
     
     #Thông tin thời tiết
     weather: Optional[WeatherInfo] = Field(default=None, description="Thông tin thời tiết hiện tại")

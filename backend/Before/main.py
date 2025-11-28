@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     
 app = FastAPI(title="Smart Tourism System", lifespan=lifespan)
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Cho phép mọi nguồn (Frontend) truy cập
@@ -54,6 +55,11 @@ app.add_middleware(
     allow_methods=["*"], # Cho phép mọi phương thức (POST, GET...)
     allow_headers=["*"], # Cho phép mọi header
 )
+
+@app.get("/")
+def read_root():
+    return {"status": "Running", "message": "Welcome to Smart Tourism API. Go to /docs for API documentation."}
+
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
     try:
@@ -82,7 +88,7 @@ async def get_recommendations(request: RecommendationRequest):
         # Key của map sẽ là tên đã chuẩn hóa (lowercase). 
         # Ví dụ: "vinwonders nha trang" -> Document Gốc
         context_map = {normalize_key(doc['name']): doc for doc in retrieved_context}
-
+        print(context_map)
         # 4. Gọi LLM
         context_str = "\n\n".join([str(doc) for doc in retrieved_context])
         prompt = build_rag_prompt(context=context_str, user_query=request.vibe_prompt)
@@ -115,7 +121,7 @@ async def get_recommendations(request: RecommendationRequest):
                 rec["overall_rating"] = float(original_doc.get("overall_rating", 0.0))
                 rec["image_urls"] = original_doc.get("image_urls", [])
                 rec["description"] = original_doc.get("description","Unknown")
-
+                
                 #Gọi API OpenWeather
                 province = original_doc.get("location_province", "")
                 clean_province = province.replace("Tỉnh", "").replace("Thành phố", "").strip()
