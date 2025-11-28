@@ -14,7 +14,7 @@ try:
             "top_p": 0.95,
             "top_k": 64,
             "max_output_tokens": 8192,
-            "response_mime_type": "application/json",
+            "response_mime_type": "application/json", # <--- TÍNH NĂNG QUAN TRỌNG NHẤT
         }
     )
 except Exception as e:
@@ -36,7 +36,7 @@ def build_rag_prompt(context: str, user_query: str) -> str:
     QUY TẮC BẮT BUỘC:
     1. NGÔN NGỮ: 100% Tiếng Việt. Nếu Context có từ tiếng Anh (ví dụ: "Hiking"), PHẢI DỊCH sang tiếng Việt ("Leo núi").
     2. TRUNG THỰC VỚI DỮ LIỆU:
-       - Tên địa điểm ("name") phải COPY Y NGUYÊN từ Context (kể cả viết hoa/thường). KHÔNG được sửa tên. Không được ghi "Gợi ý tự động"
+       - Tên địa điểm ("name") phải COPY Y NGUYÊN từ Context (kể cả viết hoa/thường). KHÔNG được sửa tên.
     3. OUTPUT FORMAT: Bạn đang chạy ở chế độ JSON Output, hãy trả về JSON khớp với Schema sau:
     
     {{
@@ -80,6 +80,8 @@ def call_llm_api(prompt: str) -> str:
 def parse_llm_response(response_str: str) -> Dict[str, Any]:
     """
     Parse kết quả từ Gemini.
+    Vì Gemini đã bật 'response_mime_type': 'application/json', 
+    nó đảm bảo 99.99% trả về JSON chuẩn, không cần cắt gọt chuỗi phức tạp.
     """
     try:
         # Gemini đôi khi trả về dư khoảng trắng, strip cho chắc

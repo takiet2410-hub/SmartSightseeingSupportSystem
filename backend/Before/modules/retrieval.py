@@ -85,9 +85,9 @@ def retrieve_context(hard_constraints: HardConstraints, query_vector: List[float
         raise Exception("Database connection not available.")
 
     pipeline = build_mongo_aggregation(hard_constraints, query_vector)
-    #print("\n👉 [DEBUG] PIPELINE GỬI XUỐNG MONGO:")
-    #print(json.dumps(pipeline, indent=2, ensure_ascii=False))
-    #print("------------------------------------------------\n")
+    print("\n👉 [DEBUG] PIPELINE GỬI XUỐNG MONGO:")
+    print(json.dumps(pipeline, indent=2, ensure_ascii=False))
+    print("------------------------------------------------\n")
     # ===========================
     
     try:
