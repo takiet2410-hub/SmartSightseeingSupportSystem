@@ -1,0 +1,9 @@
+sentence-transformers
+Pillow
+pandas
+requests
+tqdm
+pymongo
+beautifulsoup4
+openpyxl
+tabulate
