@@ -8,10 +8,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# --- Chặn các folder cũ bạn không dùng nữa ---
-core/
-modules/
-
 # --- Chặn file hệ thống ---
 .DS_Store
 .vscode/
