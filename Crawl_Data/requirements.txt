@@ -1,0 +1,19 @@
+--- Data Processing (Xử lý dữ liệu) ---
+
+pandas
+openpyxl
+tabulate
+
+--- Web Scraping & HTTP (Gửi request & Phân tích HTML) ---
+
+requests
+beautifulsoup4
+
+--- Browser Automation (Điều khiển trình duyệt) ---
+
+selenium
+webdriver-manager
+
+--- Utilities (Tiện ích: Thanh tiến trình...) ---
+
+tqdm
