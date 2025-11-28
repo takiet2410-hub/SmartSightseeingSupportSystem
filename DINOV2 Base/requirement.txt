@@ -1,0 +1,13 @@
+torch
+torchvision
+timm
+numpy
+Pillow
+pandas
+requests
+pymongo
+dnspython
+fastapi
+uvicorn
+python-multipart
+python-dotenv

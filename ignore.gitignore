@@ -1,8 +1,0 @@
-# Python cache files
-__pycache__/
-
-# VSCode settings
-.vscode/
-
-# Local environment variables
-config.env 
