@@ -1,9 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
 
-from pydantic import BaseModel, Field, computed_field
-
-from config import BASE_URL
+from pydantic import BaseModel, Field
 
 class PhotoInput(BaseModel):
     id: str
@@ -17,16 +15,6 @@ class PhotoOutput(BaseModel):
     id: str
     filename: str
     timestamp: Optional[datetime]
-    # Hide local path from frontend
-    local_path: str = Field(exclude=True) 
-
-    @computed_field
-    def url(self) -> str:
-        clean = self.local_path.replace("\\", "/")
-        if "static" in clean:
-            rel = clean.split("static")[-1].strip("/")
-            return f"{BASE_URL}/static/{rel}"
-        return ""
 
 class Album(BaseModel):
     title: str

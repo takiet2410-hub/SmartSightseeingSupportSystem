@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 
-from PIL import Image, ExifTags
+from PIL import Image
 from pillow_heif import register_heif_opener
 
 from logger_config import logger
