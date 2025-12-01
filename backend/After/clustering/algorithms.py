@@ -400,7 +400,9 @@ def run_umap_semantic(photos: List[PhotoInput], model) -> List[Album]:
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=3, 
         min_samples=1, 
-        metric='euclidean'
+        metric='euclidean',
+        cluster_selection_method='eom',
+        cluster_selection_epsilon=0.5
     )
     labels = clusterer.fit_predict(reduced_data)
     
@@ -417,7 +419,12 @@ def run_umap_semantic(photos: List[PhotoInput], model) -> List[Album]:
     # Pre-encode candidate labels for Zero-Shot classification
     candidate_labels = [
         "Beach", "Mountain", "City", "Food", "People", 
-        "Pets", "Art", "Night", "Nature", "Party", "Work", "Car", "Sunset"
+        "Pets", "Art", "Night", "Nature", "Party", "Work", "Car", "Sunset",
+        "Selfie", "Group of People", "Indoor", "Bedroom", 
+        "Screenshot", "Document", "Receipt",
+        "Flower", "Garden", "Cat", "Dog", 
+        "Street", "Building", "Car", "Traffic",
+        "Drawing", "Meme"
     ]
     with torch.no_grad():
         label_embeddings = model.encode(candidate_labels)

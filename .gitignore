@@ -12,3 +12,7 @@ static/*
 
 # Ignore log files
 logs/*
+
+# Ignore test related files
+test_photos
+test_local.py
