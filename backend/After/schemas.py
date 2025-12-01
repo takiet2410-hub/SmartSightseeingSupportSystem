@@ -10,6 +10,8 @@ class PhotoInput(BaseModel):
     timestamp: Optional[datetime] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    is_rejected: bool = False
+    rejected_reason: str = ""
 
 class PhotoOutput(BaseModel):
     id: str

@@ -392,7 +392,9 @@ def run_umap_semantic(photos: List[PhotoInput], model) -> List[Album]:
         n_components=5, 
         min_dist=0.0, 
         metric='cosine', 
-        random_state=42 # Deterministic
+        random_state=42, # Deterministic
+        n_jobs=1,
+        verbose=False
     )
     reduced_data = reducer.fit_transform(embeddings)
     
