@@ -47,7 +47,7 @@ class PhotoObject(BaseModel):
     is_junk: Optional[bool] = None  # Final verdict
 
 class CurationRequest(BaseModel):
-    image_paths: List[str] # Danh sách đường dẫn ảnh trong 1 cụm
+    image_paths: list[str] # Danh sách đường dẫn ảnh trong 1 cụm
 
 class ScoredImage(BaseModel):
     path: str
@@ -56,4 +56,4 @@ class ScoredImage(BaseModel):
 class CurationResponse(BaseModel):
     best_image: str
     best_score: float
-    all_candidates: List[ScoredImage] # Trả về danh sách đã xếp hạng để debug
+    all_candidates: list[ScoredImage] # Trả về danh sách đã xếp hạng để debug
