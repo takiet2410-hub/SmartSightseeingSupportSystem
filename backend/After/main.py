@@ -7,11 +7,13 @@ os.environ['TRANSFORMERS_VERBOSITY'] = 'error'  # Hugging Face warnings
 warnings.filterwarnings('ignore')  # Python warnings
 
 import asyncio
+import io
 import uuid
 from typing import List
 from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
+from PIL import Image
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -77,6 +79,31 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 MAX_FILES = 500
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
+def convert_and_save(content: bytes, path: str):
+    """
+    Helper: Converts raw file bytes -> Optimized JPG -> Saves to Disk.
+    """
+    try:
+        # 1. Open image from RAM bytes
+        img = Image.open(io.BytesIO(content))
+        
+        # 2. Convert to RGB (Fixes HEIC/PNG/RGBA issues)
+        img = img.convert("RGB")
+        
+        # 3. Preserve EXIF (GPS/Time)
+        exif_bytes = img.info.get("exif")
+        
+        # 4. Save as JPG
+        if exif_bytes:
+            img.save(path, "JPEG", quality=80, exif=exif_bytes)
+        else:
+            img.save(path, "JPEG", quality=80)
+            
+    except Exception as e:
+        logger.warning(f"JPG Conversion failed ({e}). Saving raw file instead.")
+        # Fallback: Just save the original bytes if conversion crashes
+        with open(path, "wb") as f:
+            f.write(content)
 
 async def process_single_photo(
     file: UploadFile,
@@ -84,21 +111,30 @@ async def process_single_photo(
     lighting_filter: LightingFilter
 ) -> PhotoInput:
     """
-    Process one photo with rate limiting.
+    Process one photo with rate limiting & auto-conversion.
     """
     async with semaphore:
-        ext = file.filename.split('.')[-1] if '.' in file.filename else "jpg"
-        safe_name = f"{uuid.uuid4()}.{ext}"
+        # 1. FORCE .jpg extension
+        safe_name = f"{uuid.uuid4()}.jpg"
         temp_path = os.path.join(TEMP_DIR, safe_name)
         
         try:
-            # Save file
-            async with aiofiles.open(temp_path, "wb") as buffer:
-                content = await file.read()
-                await buffer.write(content)
+            # 2. Read file content into RAM (Async I/O)
+            content = await file.read()
+            
+            # 3. Convert & Save in Thread Pool (CPU Bound task)
+            # This prevents the "HEIC Lag" from blocking other users
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                executor,
+                convert_and_save, # Calls our helper
+                content,
+                temp_path
+            )
+            
+            # --- The rest of your logic remains exactly the same ---
             
             # Lighting check
-            loop = asyncio.get_event_loop()
             is_good_light, light_reason = await loop.run_in_executor(
                 executor,
                 lighting_filter.analyze,
@@ -115,7 +151,7 @@ async def process_single_photo(
                     rejected_reason=light_reason
                 )
             
-            # Junk check (model already loaded)
+            # Junk check
             is_junk_photo = await loop.run_in_executor(
                 executor,
                 is_junk,
