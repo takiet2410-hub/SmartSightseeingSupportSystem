@@ -12,11 +12,13 @@ class PhotoInput(BaseModel):
     longitude: Optional[float] = None
     is_rejected: bool = False
     rejected_reason: str = ""
+    score: float = 0.0
 
 class PhotoOutput(BaseModel):
     id: str
     filename: str
     timestamp: Optional[datetime]
+    score: float = 0.0
 
 class Album(BaseModel):
     title: str

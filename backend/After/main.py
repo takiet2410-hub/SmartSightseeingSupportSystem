@@ -11,13 +11,12 @@ import io
 import uuid
 from typing import List
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
-import aiofiles
 from PIL import Image
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 
 from config import TEMP_DIR
 from metadata import MetadataExtractor
@@ -26,6 +25,7 @@ from schemas import PhotoInput
 from filters.lighting import LightingFilter
 from filters.junk_detector import is_junk, get_model as get_junk_model
 from logger_config import logger
+from curation_service import CurationService
 
 # Lifespan context manager for startup/shutdown
 @asynccontextmanager
@@ -79,36 +79,30 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 MAX_FILES = 500
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
-def convert_and_save(content: bytes, path: str):
+def save_image_to_disk(img: Image.Image, path: str):
     """
-    Helper: Converts raw file bytes -> Optimized JPG -> Saves to Disk.
+    Helper: Saves an open PIL image to disk as JPG.
     """
     try:
-        # 1. Open image from RAM bytes
-        img = Image.open(io.BytesIO(content))
-        
-        # 2. Convert to RGB (Fixes HEIC/PNG/RGBA issues)
-        img = img.convert("RGB")
-        
-        # 3. Preserve EXIF (GPS/Time)
-        exif_bytes = img.info.get("exif")
-        
-        # 4. Save as JPG
-        if exif_bytes:
-            img.save(path, "JPEG", quality=80, exif=exif_bytes)
-        else:
-            img.save(path, "JPEG", quality=80)
+        # Preserve EXIF if available
+        # Check if 'info' exists (it should on a PIL Image)
+        if hasattr(img, 'info'):
+            exif_bytes = img.info.get("exif")
+            if exif_bytes:
+                img.save(path, "JPEG", quality=80, exif=exif_bytes)
+                return
+
+        # Fallback save
+        img.save(path, "JPEG", quality=80)
             
     except Exception as e:
-        logger.warning(f"JPG Conversion failed ({e}). Saving raw file instead.")
-        # Fallback: Just save the original bytes if conversion crashes
-        with open(path, "wb") as f:
-            f.write(content)
+        logger.warning(f"Save failed: {e}")
 
 async def process_single_photo(
     file: UploadFile,
     extractor: MetadataExtractor,
-    lighting_filter: LightingFilter
+    lighting_filter: LightingFilter,
+    curator: CurationService
 ) -> PhotoInput:
     """
     Process one photo with rate limiting & auto-conversion.
@@ -125,10 +119,18 @@ async def process_single_photo(
             # 3. Convert & Save in Thread Pool (CPU Bound task)
             # This prevents the "HEIC Lag" from blocking other users
             loop = asyncio.get_event_loop()
+
+            def open_image(b):
+                i = Image.open(io.BytesIO(b))
+                i.load()
+                return i.convert("RGB")
+            
+            img = await loop.run_in_executor(executor, open_image, content)
+
             await loop.run_in_executor(
                 executor,
-                convert_and_save, # Calls our helper
-                content,
+                save_image_to_disk, # Calls our helper
+                img,
                 temp_path
             )
             
@@ -168,6 +170,13 @@ async def process_single_photo(
                     rejected_reason="AI Detected Junk"
                 )
             
+            # Calculate aesthetic score
+            score = await loop.run_in_executor(
+                executor,
+                curator.calculate_score,
+                img
+            )
+            
             # Extract metadata
             meta = await loop.run_in_executor(
                 executor,
@@ -180,6 +189,7 @@ async def process_single_photo(
                 filename=file.filename,
                 local_path=temp_path,
                 is_rejected=False,
+                score=score,
                 **meta
             )
         
@@ -217,10 +227,11 @@ async def create_album(files: List[UploadFile] = File(...)):
     
     extractor = MetadataExtractor()
     lighting_filter = LightingFilter()
+    curator = CurationService()
     
     # Process all files in parallel
     tasks = [
-        process_single_photo(file, extractor, lighting_filter)
+        process_single_photo(file, extractor, lighting_filter, curator)
         for file in files
     ]
     
@@ -274,4 +285,4 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

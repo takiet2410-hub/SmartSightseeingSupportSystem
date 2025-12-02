@@ -1,0 +1,31 @@
+services:
+  smart-album-api:
+    build: .
+    container_name: smart-album-api
+    ports:
+      - "8000:8000"
+    environment:
+      - TEMP_DIR=/app/temp
+      - TF_CPP_MIN_LOG_LEVEL=3
+      - TRANSFORMERS_VERBOSITY=error
+    volumes:
+      # Persist temp files (optional, for debugging)
+      - ./temp:/app/temp
+      # Mount models directory if it's large and you want to avoid rebuilding
+      - ./models:/app/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits (adjust based on your server)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G

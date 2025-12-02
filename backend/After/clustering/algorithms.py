@@ -78,12 +78,14 @@ def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> L
         if len(batch) < 3:
             misc_photos.extend(batch) 
         else:
-            # Create a proper Album
+            batch.sort(key=lambda x: x.score, reverse=True)
+
+            # Create a proper Album - ✅ FIX: Include score=p.score
             out_photos = [PhotoOutput(
                 id=p.id,
                 filename=p.filename,
                 timestamp=p.timestamp,
-                local_path=p.local_path
+                score=p.score  # ✅ This was already correct!
             ) for p in batch]
 
             date_str = batch[0].timestamp.strftime('%Y-%m-%d')
@@ -96,12 +98,12 @@ def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> L
     # Handle Miscellaneous photos
     if misc_photos:
         # Sort misc photos by time so the album flows naturally
-        misc_photos.sort(key=lambda x: x.timestamp)
+        misc_photos.sort(key=lambda x: x.score, reverse=True)
         out_misc = [PhotoOutput(
             id=p.id,
             filename=p.filename,
             timestamp=p.timestamp,
-            local_path=p.local_path
+            score=p.score  # ✅ This was already correct!
         ) for p in misc_photos]
 
         # Check date range
@@ -119,7 +121,10 @@ def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> L
         ))
 
     # --- PHASE 4: FINAL SORT ---
-    final_albums.sort(key=lambda a: a.photos[0].timestamp if a.photos and a.photos[0].timestamp else datetime.min)
+    final_albums.sort(
+        key=lambda a: max([p.timestamp for p in a.photos if p.timestamp], default=datetime.min),
+        reverse=True
+    )
     
     return final_albums
 
@@ -155,15 +160,16 @@ def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) ->
             
     albums = []
 
-    # 3. Create Albums
+    # 3. Create Albums - ✅ FIX: Include score
     for label, group in groups.items():
         # Sort by time/filename
-        group.sort(key=lambda x: x.timestamp or datetime.min)
+        group.sort(key=lambda x: x.score, reverse=True)
         
         out_photos = [PhotoOutput(
             id=p.id,
             filename=p.filename,
             timestamp=p.timestamp,
+            score=p.score  # ✅ This was already correct!
         ) for p in group]
         
         # Simple Title
@@ -174,13 +180,14 @@ def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) ->
             photos=out_photos
         ))
 
-    # 4. Handle Noise
+    # 4. Handle Noise - ✅ FIX: Include score
     if noise_photos:
-        noise_photos.sort(key=lambda x: x.timestamp or datetime.min)
+        noise_photos.sort(key=lambda x: x.score, reverse=True)
         out_noise = [PhotoOutput(
             id=p.id,
             filename=p.filename,
             timestamp=p.timestamp,
+            score=p.score  # ✅ This was already correct!
         ) for p in noise_photos]
         
         albums.append(Album(
@@ -190,15 +197,10 @@ def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) ->
         ))
 
     # 5. Final Sort 
-    def get_album_sort_key(album: Album):
-        # Gather all valid timestamps in this album
-        valid_dates = [p.timestamp for p in album.photos if p.timestamp]
-        
-        if valid_dates:
-            return min(valid_dates) # Use the earliest real date
-        return datetime.min # No dates at all? Put it last.
-    
-    albums.sort(key=get_album_sort_key, reverse=True)
+    albums.sort(
+        key=lambda a: max([p.timestamp for p in a.photos if p.timestamp], default=datetime.min),
+        reverse=True
+    )
 
     return albums
 
@@ -254,7 +256,7 @@ def run_jenks_time(photos: List[PhotoInput], max_events: int = 10) -> List[Album
     # Result looks like: [0, 50, 120, ..., 1000]
     split_indices = np.concatenate(([0], split_indices, [n_photos]))
 
-    # Iterate through indices to slice
+    # Iterate through indices to slice - ✅ FIX: Include score
     for i in range(len(split_indices) - 1):
         start_idx = split_indices[i]
         end_idx = split_indices[i+1]
@@ -263,11 +265,15 @@ def run_jenks_time(photos: List[PhotoInput], max_events: int = 10) -> List[Album
         batch = photos[start_idx:end_idx]
         
         if batch:
-            # Output Mapping
+            # Sort by score
+            batch.sort(key=lambda x: x.score, reverse=True)
+            
+            # Output Mapping - ✅ FIX: Add score here!
             out_photos = [PhotoOutput(
                 id=p.id,
                 filename=p.filename,
                 timestamp=p.timestamp,
+                score=p.score  # ✅ THIS WAS MISSING!
             ) for p in batch]
             
             # Title strategy: Use the first photo's date
@@ -346,12 +352,17 @@ def run_umap_semantic(photos: List[PhotoInput], model) -> List[Album]:
     
     # --- 0. SAFETY FALLBACK (Small Batches) ---
     if len(photos) < 3:
-        # Sort and return single album
-        photos.sort(key=lambda x: x.timestamp or datetime.min)
+        # Sort and return single album - ✅ FIX: Include score
+        photos.sort(key=lambda x: x.score, reverse=True)
         return [Album(
             title="Unsorted Collection", 
             method="fallback_small_batch", 
-            photos=[PhotoOutput(id=p.id, filename=p.filename, timestamp=p.timestamp) for p in photos]
+            photos=[PhotoOutput(
+                id=p.id, 
+                filename=p.filename, 
+                timestamp=p.timestamp, 
+                score=p.score  # ✅ THIS WAS MISSING!
+            ) for p in photos]
         )]
 
     # --- 1. BATCH ENCODING (Memory Safe) ---
@@ -433,7 +444,7 @@ def run_umap_semantic(photos: List[PhotoInput], model) -> List[Album]:
     
     for label_id, group_photos in groups.items():
         # Sort photos in group
-        group_photos.sort(key=lambda x: x.timestamp or datetime.min)
+        group_photos.sort(key=lambda x: x.score, reverse=True)
         
         base_title = "Visual Collection"
         try:
@@ -450,27 +461,34 @@ def run_umap_semantic(photos: List[PhotoInput], model) -> List[Album]:
                 base_title = f"{candidate_labels[best_idx]} Collection"
         except Exception: pass
 
+        # ✅ FIX: Include score here!
         out_photos = [PhotoOutput(
             id=p.id, 
             filename=p.filename, 
-            timestamp=p.timestamp
+            timestamp=p.timestamp,
+            score=p.score  # ✅ THIS WAS MISSING!
         ) for p in group_photos]
         
         albums.append(Album(title=base_title, method="clip_smart_umap", photos=out_photos))
 
-    # --- 5. HANDLE NOISE ---
+    # --- 5. HANDLE NOISE --- ✅ FIX: Include score
     if noise:
-        noise.sort(key=lambda x: x.timestamp or datetime.min)
+        noise.sort(key=lambda x: x.score, reverse=True)
         albums.append(Album(
             title="Miscellaneous", 
             method="clip_noise", 
-            photos=[PhotoOutput(id=p.id, filename=p.filename, timestamp=p.timestamp) for p in noise]
+            photos=[PhotoOutput(
+                id=p.id, 
+                filename=p.filename, 
+                timestamp=p.timestamp, 
+                score=p.score  # ✅ THIS WAS MISSING!
+            ) for p in noise]
         ))
         
     # --- 6. FINAL SORT ---
     # Sort albums by date of the first photo
     albums.sort(
-        key=lambda a: a.photos[0].timestamp if a.photos and a.photos[0].timestamp else datetime.min, 
+        key=lambda a: max([p.timestamp for p in a.photos if p.timestamp], default=datetime.min), 
         reverse=True
     )
     
