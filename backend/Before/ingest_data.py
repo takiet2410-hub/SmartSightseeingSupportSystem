@@ -42,6 +42,9 @@ def get_corpus(df: pd.DataFrame) -> List[str]:
             f"Description: {row.get('info_summary', '')}. "
             f"Tags: {row.get('activity_tags & vibe_tags (Combined_tags)', '')}. "
             f"Season: {row.get('season_tags', '')}."
+            f"Budget range: {row.get('budget_range', '')}."
+            f"Available time: {row.get('available_time_needed', '')}."
+            f"Companion: {row.get('companion_tags', '')}."
         )
         corpus.append(text_chunk)
     return corpus

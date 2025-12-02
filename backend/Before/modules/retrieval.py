@@ -1,99 +1,109 @@
 from core.db import get_db_collection
 from schemas import HardConstraints
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from bson import ObjectId
+import math
+import json
 
-import json 
+# --- Helper: Build Filter Query ---
+def build_filter_query(constraints: HardConstraints) -> Dict[str, Any]:
+    query = {}
+    if constraints.budget_range: query["budget_range"] = constraints.budget_range
+    if constraints.available_time: query["available_time"] = constraints.available_time
+    if constraints.companion_tag: query["companion_tag"] = constraints.companion_tag
+    if constraints.season_tag: query["season_tag"] = constraints.season_tag
+    if constraints.location_province: query["location_province"] = constraints.location_province
+    return query
 
+# --- 1. GET LIST (PAGINATION) ---
+def get_destinations_paginated(filters: HardConstraints, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+    collection = get_db_collection()
+    query = build_filter_query(filters)
 
-def build_mongo_aggregation(hard_constraints: HardConstraints, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    # Đếm tổng
+    total_docs = collection.count_documents(query)
+    total_pages = math.ceil(total_docs / limit) if limit > 0 else 0
     
-    # 1. Hard Filters
-    filter_conditions = {}
-    if hard_constraints.budget_range:
-        filter_conditions["budget_range"] = {"$eq": hard_constraints.budget_range}
-    if hard_constraints.available_time:
-        filter_conditions["available_time"] = {"$eq": hard_constraints.available_time}
-    if hard_constraints.companion_tag:
-        filter_conditions["companion_tag"] = {"$eq": hard_constraints.companion_tag}
-    if hard_constraints.season_tag:
-        filter_conditions["season_tag"] = {"$eq": hard_constraints.season_tag}
-    if hard_constraints.location_province:
-        filter_conditions["location_province"] = {"$eq": hard_constraints.location_province}
-    search_filter = filter_conditions if filter_conditions else None
-
-    # 2. Vector Search Stage
-    # Chúng ta lấy số lượng kết quả nhiều hơn top_k (ví dụ gấp 4 lần)
-    # để sau đó sắp xếp lại bằng rating.
-    candidates_pool_size = top_k * 4 
+    projection = {
+        "_id": 0,             
+        "landmark_id": 1,     
+        "name": 1, 
+        "location_province": 1, 
+        "image_urls": 1, 
+        "overall_rating": 1
+    }
     
+    cursor = collection.find(query, projection)\
+                       .sort("overall_rating", -1)\
+                       .skip((page - 1) * limit)\
+                       .limit(limit)
+    
+    results = []
+    for doc in cursor:
+        # 2. MAPPING DỮ LIỆU: Gán landmark_id vào id cho đúng Schema
+        # Dùng str() để chắc chắn nó là string, và .get() để tránh lỗi nếu null
+        doc["id"] = str(doc.get("landmark_id", "")) 
+        
+        results.append(doc)
+        
+    return {
+        "data": results,
+        "total": total_docs,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages
+    }
+
+# --- 2. GET DETAIL BY ID ---
+def get_destination_details(landmark_id: str) -> Optional[Dict[str, Any]]:
+    collection = get_db_collection()
+    
+    # 1. Tìm theo landmark_id
+    doc = collection.find_one({"landmark_id": landmark_id})
+    
+    if doc:
+        doc["id"] = str(doc["landmark_id"]) 
+        if "_id" in doc:
+            del doc["_id"]
+            
+        return doc
+        
+    return None
+
+# --- 3. VECTOR SEARCH FOR AI  ---
+def retrieve_context(query_vector: List[float]) -> List[Dict[str, Any]]:
+    collection = get_db_collection()
+    
+    # Chỉ thực hiện Vector Search thuần túy
     vector_search_stage = {
         "$vectorSearch": {
             "index": "vector_index", 
             "path": "v_hybrid",       
             "queryVector": query_vector,
-            "numCandidates": 1000, 
-            "limit": candidates_pool_size, # Lấy tập ứng viên rộng hơn
+            "numCandidates": 100, 
+            "limit": 20, 
         }
-    }
-    
-    if search_filter:
-        vector_search_stage["$vectorSearch"]["filter"] = search_filter
-    
-    # 3. Project Stage (Lấy các trường cần thiết)
-    project_stage = {
-        "$project": {
-            "_id": 0,
-            "name": 1,
-            "location_province": 1, # Lấy tỉnh
-            "specific_address": 1,  # Lấy địa chỉ cụ thể
-            "overall_rating": 1,    # Lấy rating
-            "text_chunk": 1, 
-            "description": 1,
-            "image_urls": 1,
-            "score": {"$meta": "vectorSearchScore"} # Điểm phù hợp ngữ nghĩa
-        }
-    }
-
-    # 4. Sort Stage 
-    # Sắp xếp kết quả theo rating giảm dần (-1)
-    # Lưu ý: Bạn có thể cân nhắc sort theo cả score và rating nếu muốn
-    sort_stage = {
-        "$sort": {
-            "overall_rating": -1, # Ưu tiên rating cao nhất
-            "score": -1           # Nếu rating bằng nhau, ưu tiên độ phù hợp
-        }
-    }
-    
-    # 5. Limit Stage (Cắt lấy top_k cuối cùng)
-    limit_stage = {
-        "$limit": top_k
     }
 
     pipeline = [
         vector_search_stage,
-        project_stage,
-        sort_stage,  # Sắp xếp lại danh sách ứng viên
-        limit_stage  # Chỉ lấy top K
+        {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
+        {"$sort": {"score": -1}}, 
+        {"$limit": 20}
     ]
     
-    return pipeline
-
-
-def retrieve_context(hard_constraints: HardConstraints, query_vector: List[float]) -> List[Dict[str, Any]]:
-    collection = get_db_collection()
-    if collection is None:
-        raise Exception("Database connection not available.")
-
-    pipeline = build_mongo_aggregation(hard_constraints, query_vector)
-    print("\n👉 [DEBUG] PIPELINE GỬI XUỐNG MONGO:")
-    print(json.dumps(pipeline, indent=2, ensure_ascii=False))
-    print("------------------------------------------------\n")
-    # ===========================
-    
     try:
-        results = list(collection.aggregate(pipeline)) 
-        print(f"👉 [DEBUG] Tìm thấy {len(results)} kết quả.")
-        return results 
+        results = list(collection.aggregate(pipeline))
+        
+        for doc in results:
+            if "landmark_id" in doc:
+                doc["id"] = str(doc["landmark_id"])
+            elif "_id" in doc:
+                doc["id"] = str(doc["_id"])
+                
+            if "_id" in doc: del doc["_id"]
+            
+        return results
     except Exception as e:
-        print(f"Error during MongoDB aggregation: {e}")
+        print(f"Error Vector Search: {e}")
         return []

@@ -1,153 +1,180 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from schemas import RecommendationRequest, RecommendationResponse
-from modules.vectorizer import HybridVectorizer
-from modules.retrieval import retrieve_context
-from modules.generation import build_rag_prompt, call_llm_api, parse_llm_response
-from modules.weather import get_current_weather
-from core.config import settings
 from contextlib import asynccontextmanager
 import unicodedata
 import os
 
-# Khởi tạo vectorizer toàn cục
+# Import modules
+from schemas import (
+    RecommendationRequest, RecommendationResponse, 
+    PaginatedResponse, DestinationDetailResponse, HardConstraints,
+    SearchRequest, SearchResponse, DestinationSummary
+)
+from modules.vectorizer import HybridVectorizer
+from modules.retrieval import retrieve_context, get_destinations_paginated, get_destination_details
+from modules.generation import build_rag_prompt, call_llm_api, parse_llm_response
+from modules.weather import get_current_weather
+from core.config import settings
+
+# Khởi tạo Vectorizer
 vectorizer = HybridVectorizer()
 
-# --- Helper: Chuẩn hóa chuỗi để so sánh tên (Khắc phục lỗi hoa/thường) ---
 def normalize_key(text: str) -> str:
-    """
-    Chuyển về chữ thường, bỏ khoảng trắng thừa, chuẩn hóa Unicode.
-    Dùng để làm key trong Map tra cứu.
-    """
     if not text: return ""
     return unicodedata.normalize('NFC', str(text)).strip().lower()
 
-def standardize_input(text: str) -> str:
-    if not text:
-        return None 
-    text = str(text)
-    text = unicodedata.normalize('NFC', text)
-    text = text.replace('\u2013', '-').replace('\u2014', '-')
-    return text.strip().lower()
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("--- STARTUP: Loading models ---")
-    try:
-        if os.path.exists(settings.VECTORIZER_PATH):
-            vectorizer.load_fitted_tfidf(settings.VECTORIZER_PATH)
-            print("Models loaded successfully.")
-        else:
-            print(f"WARNING: Không tìm thấy file vectorizer tại: {settings.VECTORIZER_PATH}")
-            
-    except Exception as e:
-        print(f"❌ CRITICAL ERROR during startup: {e}")
+    print("--- STARTUP ---")
+    if os.path.exists(settings.VECTORIZER_PATH):
+        vectorizer.load_fitted_tfidf(settings.VECTORIZER_PATH)
+    else:
+        print("⚠️ Warning: Vectorizer not found.")
     yield
     print("--- SHUTDOWN ---")
-    
-app = FastAPI(title="Smart Tourism System", lifespan=lifespan)
 
+app = FastAPI(title="Smart Tourism API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Cho phép mọi nguồn (Frontend) truy cập
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"], # Cho phép mọi phương thức (POST, GET...)
-    allow_headers=["*"], # Cho phép mọi header
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.get("/")
-def read_root():
-    return {"status": "Running", "message": "Welcome to Smart Tourism API. Go to /docs for API documentation."}
+# ==========================================
+# API 1: LẤY DANH SÁCH & FILTER (Mặc định)
+# ==========================================
+@app.get("/destinations", response_model=PaginatedResponse)
+async def list_destinations(
+    filters: HardConstraints = Depends(),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50)
+):
+    """Hiển thị danh sách địa điểm theo trang và bộ lọc cơ bản (Không dùng AI)"""
+    return get_destinations_paginated(filters, page, limit)
 
+# ==========================================
+# API 2: LẤY CHI TIẾT (Khi click vào card)
+# ==========================================
+@app.get("/destinations/{landmark_id}", response_model=DestinationDetailResponse)
+async def get_destination_detail(landmark_id: str):
+    """Lấy thông tin chi tiết địa điểm + Thời tiết"""
+    details = get_destination_details(landmark_id)
+    
+    if not details:
+        raise HTTPException(status_code=404, detail="Destination not found")
+    
+    # Data Enrichment: Weather
+    province = details.get("location_province", "")
+    if province:
+        clean_province = province.replace("Tỉnh", "").replace("Thành phố", "").strip()
+        try:
+            weather = await get_current_weather(clean_province)
+            details["weather"] = weather
+        except Exception:
+            details["weather"] = None
+            
+    return details
+
+# ==========================================
+# API 3: VIBE SEARCH (AI RECOMMENDATION)
+# ==========================================
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
+    """Tìm kiếm bằng AI + Vector Search"""
     try:
-        # 1. Chuẩn hóa input
-        if request.hard_constraints:
-            req = request.hard_constraints
-            req.available_time = standardize_input(req.available_time)
-            req.budget_range = standardize_input(req.budget_range)
-            req.companion_tag = standardize_input(req.companion_tag)
-            req.season_tag = standardize_input(req.season_tag)
-        
-        print(f"Received query: {request.vibe_prompt}")
-        
-        # 2. Retrieval
+        # 1. Vector Search
         query_vector = vectorizer.transform_single(request.vibe_prompt)
-        retrieved_context = retrieve_context(request.hard_constraints, query_vector)
+        retrieved_context = retrieve_context(query_vector)
         
         if not retrieved_context:
-            return RecommendationResponse(
-                status="error", 
-                recommendations=[], 
-                debug_info={"message": "No destinations found matching criteria."}
-            )
+            return RecommendationResponse(status="empty", recommendations=[])
 
-        # 3. TẠO MAP TRA CỨU THÔNG MINH (QUAN TRỌNG)
-        # Key của map sẽ là tên đã chuẩn hóa (lowercase). 
-        # Ví dụ: "vinwonders nha trang" -> Document Gốc
+        # 2. Tạo Map để enrichment (Key: Tên chuẩn hóa -> Value: Document gốc)
         context_map = {normalize_key(doc['name']): doc for doc in retrieved_context}
-        print(context_map)
-        # 4. Gọi LLM
-        context_str = "\n\n".join([str(doc) for doc in retrieved_context])
+
+        # 3. Gọi Gemini LLM
+        context_str = "\n".join([f"- {doc['name']}: {doc.get('description','')[:200]}..." for doc in retrieved_context])
         prompt = build_rag_prompt(context=context_str, user_query=request.vibe_prompt)
-        llm_raw_response = call_llm_api(prompt)
-        parsed_response = parse_llm_response(llm_raw_response)
+        llm_response = parse_llm_response(call_llm_api(prompt))
         
-        if "error" in parsed_response:
-             # Fallback: Nếu LLM lỗi JSON, trả về top 3 từ DB luôn
-             print("LLM Error, using fallback.")
-             parsed_response["recommendations"] = [{"name": doc["name"], "rank": i+1, "justification_summary": "Gợi ý tự động."} for i, doc in enumerate(retrieved_context[:3])]
+        if "error" in llm_response:
+             # Fallback nếu LLM lỗi: trả về kết quả vector search thô
+             fallback_recs = []
+             for doc in retrieved_context[:3]:
+                 doc_copy = doc.copy()
+                 doc_copy["justification_summary"] = "Gợi ý tự động (LLM Error)"
+                 fallback_recs.append(doc_copy)
+             return RecommendationResponse(status="fallback", recommendations=fallback_recs)
 
-        # 5. === DATA ENRICHMENT (GHÉP DỮ LIỆU CHÍNH XÁC TỪ DB) ===
-        llm_recs = parsed_response.get("recommendations", [])
-        final_recommendations = []
-
-        for rec in llm_recs:
-            # Lấy tên do LLM sinh ra
-            llm_name = rec.get("name", "")
-            # Chuẩn hóa tên đó (lowercase) để tìm trong Map
-            lookup_key = normalize_key(llm_name)
+        # 4. Ghép dữ liệu (Enrichment)
+        final_recs = []
+        for rec in llm_response.get("recommendations", []):
+            key = normalize_key(rec.get("name"))
+            original = context_map.get(key)
             
-            # Tra cứu vào dữ liệu gốc
-            original_doc = context_map.get(lookup_key)
-            
-            if original_doc:
-                # Ghi đè lại tên bằng tên chuẩn trong DB (để sửa lỗi hoa/thường của LLM)
-                rec["name"] = original_doc["name"] 
-                rec["location_province"] = original_doc.get("location_province", "Unknown")
-                rec["specific_address"] = original_doc.get("specific_address", "Unknown")
-                rec["overall_rating"] = float(original_doc.get("overall_rating", 0.0))
-                rec["image_urls"] = original_doc.get("image_urls", [])
-                rec["description"] = original_doc.get("description","Unknown")
+            if original:
+                # Merge thông tin: Lấy ID và thông tin cứng từ DB, Lấy justification từ AI
+                merged_rec = original.copy() # Chứa id, image, rating...
+                merged_rec["justification_summary"] = rec.get("justification_summary")
+                merged_rec["suggested_activities"] = rec.get("suggested_activities", [])
                 
-                #Gọi API OpenWeather
-                province = original_doc.get("location_province", "")
-                clean_province = province.replace("Tỉnh", "").replace("Thành phố", "").strip()
-                weather_data = await get_current_weather(clean_province)
-                rec["weather"] = weather_data
+                # Lấy thời tiết cho các địa điểm gợi ý luôn
+                province = merged_rec.get("location_province", "").replace("Tỉnh", "").strip()
+                try:
+                    merged_rec["weather"] = await get_current_weather(province)
+                except:
+                    merged_rec["weather"] = None
                 
-                final_recommendations.append(rec)
-            else:
-                print(f"⚠️ Mismatch: LLM generated '{llm_name}' but DB keys are: {list(context_map.keys())}")
-                # Chỉ thêm vào nếu thực sự cần thiết, hoặc bỏ qua
-                # Ở đây ta chọn bỏ qua để tránh hiển thị dữ liệu rác
-                continue
+                final_recs.append(merged_rec)
+        
+        return RecommendationResponse(status="success", recommendations=final_recs)
 
-        return RecommendationResponse(
-            status="success",
-            recommendations=final_recommendations,
-            debug_info={
-                "retrieved_count": len(retrieved_context), 
-                "top_match_score": retrieved_context[0].get('score') if retrieved_context else 0
-            }
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API 4: SEMANTIC SEARCH (Vector Search Only)
+# ==========================================
+@app.post("/search", response_model=SearchResponse)
+async def semantic_search(request: SearchRequest):
+    """
+    Tìm kiếm thông minh dựa trên Vector (Vibe Search).
+    - Tốc độ nhanh (Không dùng LLM).
+    - Hiểu ngữ nghĩa (VD: "lạnh" -> tìm Đà Lạt, Sapa).
+    """
+    try:
+        # 1. Vector hóa câu query
+        query_vector = vectorizer.transform_single(request.query)
+        
+        # 2. Gọi hàm retrieve_context (Hàm này đã có sẵn ở retrieval.py)
+        # Lưu ý: Hàm này trả về Top K kết quả gần nhất
+        raw_results = retrieve_context(query_vector)
+        
+        # 3. Chuẩn hóa dữ liệu trả về (Mapping sang DestinationSummary)
+        final_results = []
+        for doc in raw_results:
+            # Mapping an toàn
+            item = DestinationSummary(
+                id=str(doc.get("landmark_id", "")), # Map landmark_id -> id
+                name=doc.get("name", "Unknown"),
+                location_province=doc.get("location_province", ""),
+                image_urls=doc.get("image_urls", []),
+                overall_rating=doc.get("overall_rating", 0.0)
+            )
+            final_results.append(item)
+            
+        return SearchResponse(
+            data=final_results,
+            total_found=len(final_results)
         )
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"Search Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 if __name__ == "__main__":
     import uvicorn
-    print("Run the server using: uvicorn main:app --reload")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
