@@ -85,6 +85,10 @@ def run_ingestion():
         hybrid_vector = vectorizer.transform_single(text_chunk) 
         
         combined_tags = clean_split_tags(row.get('activity_tags & vibe_tags (Combined_tags)', ''))
+        available_time_tags = clean_split_tags(row.get('available_time_needed', ''))
+        season_tags = clean_split_tags(row.get('season_tags', ''))
+        companion_tags = clean_split_tags(row.get('companion_tags', ''))
+        
         
         doc = {
             "landmark_id": str(row.get('landmark_id')), 
@@ -99,12 +103,10 @@ def run_ingestion():
             # === 3. ÁP DỤNG CHUẨN HÓA CHO CÁC TRƯỜNG FILTER ===
             # Dữ liệu vào DB sẽ sạch sẽ: "1-2 giờ", "thấp", "mùa hè" (lowercase, chuẩn dấu)
             "budget_range": standardize_text(row.get('budget_range', '')), 
-            "available_time": standardize_text(row.get('available_time_needed', '')),
-            "companion_tag": standardize_text(row.get('companion_tags', '')),
-            "season_tag": standardize_text(row.get('season_tags', '')),
-            # ==================================================
-
-            "combined_tags_array": combined_tags,
+            "available_time": available_time_tags,
+            "companion_tags": companion_tags,
+            "season_tags": season_tags,
+            "combined_tags": combined_tags,
             "description": row.get('info_summary'),
             "image_urls": str(row.get('image_urls', '')).split(';')
         }

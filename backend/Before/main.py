@@ -151,7 +151,7 @@ async def semantic_search(request: SearchRequest):
         
         # 2. Gọi hàm retrieve_context (Hàm này đã có sẵn ở retrieval.py)
         # Lưu ý: Hàm này trả về Top K kết quả gần nhất
-        raw_results = retrieve_context(query_vector)
+        raw_results = retrieve_context(query_vector, hard_constraints=request.hard_constraints)
         
         # 3. Chuẩn hóa dữ liệu trả về (Mapping sang DestinationSummary)
         final_results = []

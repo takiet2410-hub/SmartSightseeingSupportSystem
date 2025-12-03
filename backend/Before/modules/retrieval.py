@@ -71,7 +71,7 @@ def get_destination_details(landmark_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 # --- 3. VECTOR SEARCH FOR AI  ---
-def retrieve_context(query_vector: List[float]) -> List[Dict[str, Any]]:
+def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardConstraints] = None) -> List[Dict[str, Any]]:
     collection = get_db_collection()
     
     # Chỉ thực hiện Vector Search thuần túy
@@ -84,23 +84,25 @@ def retrieve_context(query_vector: List[float]) -> List[Dict[str, Any]]:
             "limit": 20, 
         }
     }
+    
+    if hard_constraints:
+        search_filter = build_filter_query(hard_constraints)
+        if search_filter:
+            vector_search_stage["$vectorSearch"]["filter"] = search_filter
 
     pipeline = [
         vector_search_stage,
         {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
         {"$sort": {"score": -1}}, 
-        {"$limit": 20}
+        {"$limit": 20} 
     ]
     
     try:
         results = list(collection.aggregate(pipeline))
         
+        # Mapping ID (quan trọng)
         for doc in results:
-            if "landmark_id" in doc:
-                doc["id"] = str(doc["landmark_id"])
-            elif "_id" in doc:
-                doc["id"] = str(doc["_id"])
-                
+            doc["id"] = str(doc.get("landmark_id", doc.get("_id", "")))
             if "_id" in doc: del doc["_id"]
             
         return results

@@ -66,6 +66,7 @@ class RecommendationResponse(BaseModel):
 # --- 5. SEMANTIC SEARCH SCHEMAS ---
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Nội dung tìm kiếm (VD: du lịch biển giá rẻ)")
+    hard_constraints: Optional[HardConstraints] = Field(default=None, description="Bộ lọc cứng kèm theo")
 
 class SearchResponse(BaseModel):
     # Trả về danh sách DestinationSummary (giống API danh sách) cho nhẹ
