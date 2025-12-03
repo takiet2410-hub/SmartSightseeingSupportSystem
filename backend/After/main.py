@@ -24,7 +24,7 @@ from metadata import MetadataExtractor
 from clustering.service import ClusteringService, get_model as get_clip_model
 from schemas import PhotoInput
 from filters.lighting import LightingFilter
-from filters.junk_detector import is_junk, get_model as get_junk_model
+from filters.junk_detector import is_junk_batch, get_model as get_junk_model
 from logger_config import logger
 from curation_service import CurationService
 
@@ -64,11 +64,11 @@ app.add_middleware(
 # Mount static files directory for serving images
 app.mount("/images", StaticFiles(directory=PROCESSED_DIR), name="images")
 
-# Thread pool for CPU-bound operations
-executor = ThreadPoolExecutor(max_workers=4)
+# Thread pool for CPU-bound operations - INCREASED for better parallelism
+executor = ThreadPoolExecutor(max_workers=8)
 
 # Concurrency limiter
-MAX_CONCURRENT = 10
+MAX_CONCURRENT = 20  # Increased from 10
 semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
 # Input limits
@@ -80,9 +80,9 @@ def save_image_to_disk(img: Image.Image, path: str):
         if hasattr(img, 'info'):
             exif_bytes = img.info.get("exif")
             if exif_bytes:
-                img.save(path, "JPEG", quality=80, exif=exif_bytes)
+                img.save(path, "JPEG", quality=85, exif=exif_bytes, optimize=True)
                 return
-        img.save(path, "JPEG", quality=80)
+        img.save(path, "JPEG", quality=85, optimize=True)
     except Exception as e:
         logger.warning(f"Save failed: {e}")
 
@@ -106,12 +106,21 @@ async def process_single_photo(
                 return i.convert("RGB")
             
             img = await loop.run_in_executor(executor, open_image, content)
+            
+            # 🚀 OPTIMIZATION: Thumbnail for faster processing
+            img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+            
             await loop.run_in_executor(executor, save_image_to_disk, img, temp_path)
             
-            # Lighting check
-            is_good_light, light_reason = await loop.run_in_executor(
-                executor, lighting_filter.analyze, temp_path
+            # 🚀 OPTIMIZATION: Run filters in parallel
+            filter_results = await asyncio.gather(
+                loop.run_in_executor(executor, lighting_filter.analyze, temp_path),
+                loop.run_in_executor(executor, extractor.get_metadata, temp_path),
+                return_exceptions=True
             )
+            
+            is_good_light, light_reason = filter_results[0]
+            meta = filter_results[1]
             
             if not is_good_light:
                 logger.info(f"{file.filename}: {light_reason}")
@@ -123,24 +132,8 @@ async def process_single_photo(
                     rejected_reason=light_reason
                 )
             
-            # Junk check
-            is_junk_photo = await loop.run_in_executor(executor, is_junk, temp_path)
-            
-            if is_junk_photo:
-                logger.info(f"{file.filename}: Junk detected")
-                return PhotoInput(
-                    id=file.filename,
-                    filename=file.filename,
-                    local_path=temp_path,
-                    is_rejected=True,
-                    rejected_reason="AI Detected Junk"
-                )
-            
-            # Calculate aesthetic score
+            # 🚀 Calculate aesthetic score (using already-loaded image)
             score = await loop.run_in_executor(executor, curator.calculate_score, img)
-            
-            # Extract metadata
-            meta = await loop.run_in_executor(executor, extractor.get_metadata, temp_path)
             
             return PhotoInput(
                 id=file.filename,
@@ -176,6 +169,7 @@ async def create_album(files: List[UploadFile] = File(...)):
     lighting_filter = LightingFilter()
     curator = CurationService()
     
+    # Process all photos
     tasks = [process_single_photo(file, extractor, lighting_filter, curator) for file in files]
     photo_inputs = await asyncio.gather(*tasks, return_exceptions=True)
     
@@ -189,18 +183,29 @@ async def create_album(files: List[UploadFile] = File(...)):
     if not valid_inputs:
         raise HTTPException(status_code=500, detail="All photos failed to process")
     
+    # 🚀 OPTIMIZATION: Batch junk detection
+    non_rejected = [p for p in valid_inputs if not p.is_rejected]
+    
+    if non_rejected:
+        loop = asyncio.get_event_loop()
+        paths = [p.local_path for p in non_rejected]
+        junk_results = await loop.run_in_executor(executor, is_junk_batch, paths)
+        
+        for photo, is_junk_photo in zip(non_rejected, junk_results):
+            if is_junk_photo:
+                logger.info(f"{photo.filename}: Junk detected")
+                photo.is_rejected = True
+                photo.rejected_reason = "AI Detected Junk"
+    
     try:
         albums = ClusteringService.dispatch(valid_inputs)
         
-        # ✅ ADD THIS: Add image URLs to photos
+        # Add image URLs to photos
         for album in albums:
             for photo in album.photos:
-                # Find the original photo from valid_inputs
                 original = next((p for p in valid_inputs if p.filename == photo.filename), None)
                 if original and os.path.exists(original.local_path):
-                    # Extract just the filename from the full path
                     image_filename = os.path.basename(original.local_path)
-                    # Create URL: /images/{filename}
                     photo.image_url = f"/images/{image_filename}"
         
         logger.info(f"Created {len(albums)} albums")

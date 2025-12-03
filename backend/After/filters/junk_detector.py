@@ -8,7 +8,7 @@ from tf_keras.preprocessing import image
 
 from logger_config import logger
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TensorFlow logging
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # Singleton Cache
 _junk_model = None
@@ -20,7 +20,6 @@ def get_model():
     if _junk_model is not None: return _junk_model
     
     with _model_lock:
-        # Second check (prevent duplicate loading)
         if _junk_model is not None:
             return _junk_model
         
@@ -36,29 +35,49 @@ def get_model():
         return _junk_model
 
 def is_junk(image_path: str) -> bool:
+    """Single image junk detection (kept for backwards compatibility)"""
+    return is_junk_batch([image_path])[0]
+
+def is_junk_batch(image_paths: list) -> list:
     """
-    Returns True if image is Junk, False if good.
-    Assumes model input size is 224x224 (Standard). 
-    Change target_size if your teammate used something else!
+    🚀 OPTIMIZED: Batch junk detection for multiple images
+    Returns list of boolean values
     """
     model = get_model()
-    if not model: return False # Fail safe
+    if not model: 
+        return [False] * len(image_paths)
 
     try:
-        # 1. Preprocess
-        img = image.load_img(image_path, target_size=(224, 224))
-        x = image.img_to_array(img)
-        x = np.expand_dims(x, axis=0)
-        x = x / 255.0 # Normalize if your model expects [0,1]
-
-        # 2. Predict
-        # Assuming binary output: 0=Good, 1=Junk (Or vice versa? Check with teammate!)
-        # Let's assume prediction > 0.5 is Junk
-        prediction = model.predict(x, verbose=0)[0][0]
+        # Batch load and preprocess
+        batch_images = []
+        valid_indices = []
         
-        is_junk_detected = prediction < 0.5
-        return is_junk_detected
+        for idx, path in enumerate(image_paths):
+            try:
+                img = image.load_img(path, target_size=(224, 224))
+                x = image.img_to_array(img)
+                batch_images.append(x)
+                valid_indices.append(idx)
+            except Exception as e:
+                logger.error(f"Failed to load {path}: {e}")
+                continue
+        
+        if not batch_images:
+            return [False] * len(image_paths)
+        
+        # Stack into batch
+        batch_array = np.array(batch_images) / 255.0
+        
+        # Batch predict (much faster!)
+        predictions = model.predict(batch_array, verbose=0, batch_size=32)
+        
+        # Map results back
+        results = [False] * len(image_paths)
+        for idx, pred in zip(valid_indices, predictions):
+            results[idx] = pred[0] < 0.5
+        
+        return results
 
     except Exception as e:
-        logger.error(f"Junk Inference Failed: {e}")
-        return False
+        logger.error(f"Batch Junk Inference Failed: {e}")
+        return [False] * len(image_paths)

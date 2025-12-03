@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import mediapipe as mp
-import os
 from PIL import Image
 
 class CurationService:
@@ -9,7 +8,10 @@ class CurationService:
         try:
             print("init MediaPipe...")
             self.mp_face_detection = mp.solutions.face_detection
-            self.face_detection = self.mp_face_detection.FaceDetection(min_detection_confidence=0.5)
+            self.face_detection = self.mp_face_detection.FaceDetection(
+                min_detection_confidence=0.5,
+                model_selection=0  # 0 = faster model for close-range
+            )
             print("MediaPipe Init Success")
         except Exception as e:
             print(f"CRITICAL: MediaPipe failed to load: {e}")
@@ -19,7 +21,7 @@ class CurationService:
         try:
             image_bgr = None
 
-            # 1. Convert PIL -> OpenCV (BGR)
+            # Convert PIL -> OpenCV (BGR)
             if isinstance(image_input, Image.Image):
                 if image_input.mode != 'RGB':
                     image_input = image_input.convert('RGB')
@@ -32,7 +34,6 @@ class CurationService:
                 print("Curation: Image is None")
                 return 0.0
 
-            # 2. RUN SCORING
             return self._calculate_internal(image_bgr)
 
         except Exception as e:
@@ -41,6 +42,12 @@ class CurationService:
 
     def _calculate_internal(self, image_bgr) -> float:
         try:
+            # 🚀 OPTIMIZATION: Resize large images for faster processing
+            h, w = image_bgr.shape[:2]
+            if max(h, w) > 1024:
+                scale = 1024 / max(h, w)
+                image_bgr = cv2.resize(image_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            
             # --- BLUR ---
             gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
             raw_blur = cv2.Laplacian(gray, cv2.CV_64F).var()
@@ -59,7 +66,7 @@ class CurationService:
                     img_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
                     results = self.face_detection.process(img_rgb)
                     if results.detections:
-                        score_face = 1.0 # Found a face!
+                        score_face = 1.0
                 except Exception as e:
                     print(f"MediaPipe Error: {e}")
 
