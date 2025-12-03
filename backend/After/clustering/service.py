@@ -14,7 +14,7 @@ from .algorithms import (
 
 # --- THREAD-SAFE SINGLETON ---
 _clip_model = None
-_model_lock = threading.Lock()  # ← ADD THIS
+_model_lock = threading.Lock()  # ADD THIS
 
 
 def get_model():
@@ -35,7 +35,7 @@ def get_model():
         
         logger.info("Loading CLIP Model...")
         _clip_model = SentenceTransformer('clip-ViT-B-32')
-        logger.info("CLIP Model Loaded ✓")
+        logger.info("CLIP Model Loaded")
         
         return _clip_model
 

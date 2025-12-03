@@ -31,7 +31,7 @@ def get_model():
         
         logger.info("Loading Junk Filter Model (TensorFlow)...")
         _junk_model = load_model(model_path)
-        logger.info("Junk Filter Model Loaded ✓")
+        logger.info("Junk Filter Model Loaded")
         
         return _junk_model
 

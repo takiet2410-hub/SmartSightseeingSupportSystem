@@ -19,6 +19,7 @@ class PhotoOutput(BaseModel):
     filename: str
     timestamp: Optional[datetime]
     score: float = 0.0
+    image_url: Optional[str] = None
 
 class Album(BaseModel):
     title: str

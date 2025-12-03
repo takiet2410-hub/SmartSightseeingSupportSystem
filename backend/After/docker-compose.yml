@@ -6,12 +6,12 @@ services:
       - "8000:8000"
     environment:
       - TEMP_DIR=/app/temp
+      - PROCESSED_DIR=/app/processed
       - TF_CPP_MIN_LOG_LEVEL=3
       - TRANSFORMERS_VERBOSITY=error
     volumes:
-      # Persist temp files (optional, for debugging)
       - ./temp:/app/temp
-      # Mount models directory if it's large and you want to avoid rebuilding
+      - ./processed:/app/processed  
       - ./models:/app/models:ro
     restart: unless-stopped
     healthcheck:
@@ -20,7 +20,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Resource limits (adjust based on your server)
     deploy:
       resources:
         limits:
