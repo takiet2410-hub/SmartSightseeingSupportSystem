@@ -1,16 +1,33 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
+import hashlib
 
 from PIL import Image
 from pillow_heif import register_heif_opener
 
 from logger_config import logger
 
-# Register HEIC support globally
 register_heif_opener()
 
 class MetadataExtractor:
+    def __init__(self):
+        # 🚀 V2: Cache parsed EXIF data
+        self._cache = {}
+    
     def get_metadata(self, file_path: str) -> Dict[str, Any]:
+        """Extract metadata from file path (with caching)"""
+        
+        # Simple cache key based on file path
+        cache_key = file_path
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        result = self._extract_metadata(file_path)
+        self._cache[cache_key] = result
+        return result
+    
+    def _extract_metadata(self, file_path: str) -> Dict[str, Any]:
+        """Internal extraction logic"""
         result = {"timestamp": None, "latitude": None, "longitude": None}
         try:
             img = Image.open(file_path)
