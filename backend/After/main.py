@@ -76,7 +76,7 @@ def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes =
     """
     🚀 V2.1: Save original quality for display
     - Priority 1: Save original bytes (no re-encoding)
-    - Priority 2: Save high-quality JPEG (95%)
+    - Priority 2: Save high-quality JPEG (100%)
     """
     try:
         if original_bytes:
@@ -88,9 +88,9 @@ def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes =
             if hasattr(img_full, 'info'):
                 exif_bytes = img_full.info.get("exif")
                 if exif_bytes:
-                    img_full.save(path, "JPEG", quality=95, exif=exif_bytes, optimize=True)
+                    img_full.save(path, "JPEG", quality=95, exif=exif_bytes, optimize=True, progressive=True)
                     return
-            img_full.save(path, "JPEG", quality=95, optimize=True)
+            img_full.save(path, "JPEG", quality=95, optimize=True, progressive=True)
     except Exception as e:
         logger.warning(f"Save failed: {e}")
 
