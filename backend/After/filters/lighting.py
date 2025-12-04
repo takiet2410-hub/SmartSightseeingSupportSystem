@@ -24,7 +24,8 @@ class LightingFilter:
     
     def analyze_from_image(self, pil_image: Image.Image) -> Tuple[bool, str]:
         """
-        🚀 V2: Accept PIL Image directly (avoid disk read)
+        🚀 V2.1: Accept PIL Image directly (avoid disk read)
+        Used for thumbnail processing - faster!
         """
         try:
             # Convert PIL -> OpenCV BGR

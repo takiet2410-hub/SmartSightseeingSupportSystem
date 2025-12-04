@@ -1,6 +1,5 @@
 from typing import Dict, Any, Optional
 from datetime import datetime
-import hashlib
 
 from PIL import Image
 from pillow_heif import register_heif_opener
@@ -11,7 +10,7 @@ register_heif_opener()
 
 class MetadataExtractor:
     def __init__(self):
-        # 🚀 V2: Cache parsed EXIF data
+        # 🚀 V2.1: Cache parsed EXIF data to avoid re-parsing
         self._cache = {}
     
     def get_metadata(self, file_path: str) -> Dict[str, Any]:
@@ -32,14 +31,16 @@ class MetadataExtractor:
         try:
             img = Image.open(file_path)
             exif = img._getexif()
-            if not exif: return result
+            if not exif: 
+                return result
 
             # Time (Tag 36867 = DateTimeOriginal)
             date_str = exif.get(36867) 
             if date_str:
                 try:
                     result["timestamp"] = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-                except ValueError: pass
+                except ValueError: 
+                    pass
 
             # GPS (Tag 34853)
             gps_info = exif.get(34853)

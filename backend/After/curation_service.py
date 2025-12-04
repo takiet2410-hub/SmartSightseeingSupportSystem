@@ -42,11 +42,17 @@ class CurationService:
 
     def _calculate_internal(self, image_bgr) -> float:
         try:
-            # 🚀 OPTIMIZATION: Resize large images for faster processing
+            # 🚀 V2.1: Resize large images for faster processing
             h, w = image_bgr.shape[:2]
             if max(h, w) > 1024:
                 scale = 1024 / max(h, w)
-                image_bgr = cv2.resize(image_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+                image_bgr = cv2.resize(
+                    image_bgr, 
+                    None, 
+                    fx=scale, 
+                    fy=scale, 
+                    interpolation=cv2.INTER_AREA
+                )
             
             # --- BLUR ---
             gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)

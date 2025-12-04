@@ -72,14 +72,25 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 MAX_FILES = 500
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
-def save_image_to_disk(img: Image.Image, path: str):
+def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes = None):
+    """
+    🚀 V2.1: Save original quality for display
+    - Priority 1: Save original bytes (no re-encoding)
+    - Priority 2: Save high-quality JPEG (95%)
+    """
     try:
-        if hasattr(img, 'info'):
-            exif_bytes = img.info.get("exif")
-            if exif_bytes:
-                img.save(path, "JPEG", quality=85, exif=exif_bytes, optimize=True)
-                return
-        img.save(path, "JPEG", quality=85, optimize=True)
+        if original_bytes:
+            # Best option: Save original bytes directly (no quality loss)
+            with open(path, 'wb') as f:
+                f.write(original_bytes)
+        else:
+            # Fallback: Save high quality with EXIF preservation
+            if hasattr(img_full, 'info'):
+                exif_bytes = img_full.info.get("exif")
+                if exif_bytes:
+                    img_full.save(path, "JPEG", quality=95, exif=exif_bytes, optimize=True)
+                    return
+            img_full.save(path, "JPEG", quality=95, optimize=True)
     except Exception as e:
         logger.warning(f"Save failed: {e}")
 
@@ -87,19 +98,22 @@ def compute_image_hash(content: bytes) -> str:
     """🚀 V2: Fast hash for duplicate detection"""
     return hashlib.md5(content).hexdigest()
 
-def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, bytes]:
+def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, Image.Image, bytes]:
     """
-    🚀 V2: Load image once, return both PIL object and raw bytes
-    Thumbnail immediately to save memory
+    🚀 V2.1: Load image once, return both versions
+    - img_full: Full resolution for display
+    - img_thumb: Thumbnail for fast ML processing
+    - content: Original bytes for lossless save
     """
-    img = Image.open(io.BytesIO(content))
-    img.load()
-    img = img.convert("RGB")
+    img_full = Image.open(io.BytesIO(content))
+    img_full.load()
+    img_full = img_full.convert("RGB")
     
-    # Thumbnail early to reduce memory footprint
-    img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+    # Create thumbnail for ML processing (speed optimization)
+    img_thumb = img_full.copy()
+    img_thumb.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
     
-    return img, content
+    return img_full, img_thumb, content
 
 async def process_single_photo(
     file: UploadFile,
@@ -117,26 +131,29 @@ async def process_single_photo(
                 logger.info(f"{file.filename}: Duplicate detected (using cache)")
                 cached = _processed_cache[img_hash]
                 # Return cached result with new filename
-                cached.filename = file.filename
-                cached.id = file.filename
-                return cached
+                cached_copy = cached.model_copy()
+                cached_copy.filename = file.filename
+                cached_copy.id = file.filename
+                return cached_copy
             
             safe_name = f"{uuid.uuid4()}.jpg"
             temp_path = os.path.join(PROCESSED_DIR, safe_name)
             
             loop = asyncio.get_event_loop()
             
-            # 🚀 V2: Load image only ONCE
-            img, raw_content = await loop.run_in_executor(
+            # 🚀 V2.1: Load once, get both full-res and thumbnail
+            img_full, img_thumb, raw_content = await loop.run_in_executor(
                 executor, load_and_prepare_image, content
             )
             
-            # Save to disk (needed for some filters)
-            await loop.run_in_executor(executor, save_image_to_disk, img, temp_path)
+            # 🚀 V2.1: Save ORIGINAL quality for frontend display
+            await loop.run_in_executor(
+                executor, save_image_to_disk, img_full, temp_path, raw_content
+            )
             
-            # 🚀 V2: Run lighting + metadata in parallel (pass image object to avoid reload)
+            # 🚀 V2.1: Use THUMBNAIL for all processing (faster)
             lighting_task = loop.run_in_executor(
-                executor, lighting_filter.analyze_from_image, img
+                executor, lighting_filter.analyze_from_image, img_thumb
             )
             metadata_task = loop.run_in_executor(
                 executor, extractor.get_metadata, temp_path
@@ -157,8 +174,8 @@ async def process_single_photo(
                 _processed_cache[img_hash] = result
                 return result
             
-            # 🚀 V2: Calculate score using in-memory image (no disk read)
-            score = await loop.run_in_executor(executor, curator.calculate_score, img)
+            # 🚀 V2.1: Calculate score using thumbnail (faster, no quality impact)
+            score = await loop.run_in_executor(executor, curator.calculate_score, img_thumb)
             
             result = PhotoInput(
                 id=file.filename,

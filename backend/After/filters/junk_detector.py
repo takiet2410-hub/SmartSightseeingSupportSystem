@@ -17,7 +17,8 @@ _model_lock = threading.Lock()
 def get_model():
     global _junk_model
     
-    if _junk_model is not None: return _junk_model
+    if _junk_model is not None: 
+        return _junk_model
     
     with _model_lock:
         if _junk_model is not None:
@@ -40,8 +41,8 @@ def is_junk(image_path: str) -> bool:
 
 def is_junk_batch(image_paths: list) -> list:
     """
-    🚀 OPTIMIZED: Batch junk detection for multiple images
-    Returns list of boolean values
+    🚀 V2.1: Batch junk detection for multiple images
+    Returns list of boolean values (True = junk, False = good)
     """
     model = get_model()
     if not model: 
@@ -65,16 +66,16 @@ def is_junk_batch(image_paths: list) -> list:
         if not batch_images:
             return [False] * len(image_paths)
         
-        # Stack into batch
+        # Stack into batch and normalize
         batch_array = np.array(batch_images) / 255.0
         
-        # Batch predict (much faster!)
+        # Batch predict (much faster than individual predictions!)
         predictions = model.predict(batch_array, verbose=0, batch_size=32)
         
-        # Map results back
+        # Map results back to original order
         results = [False] * len(image_paths)
         for idx, pred in zip(valid_indices, predictions):
-            results[idx] = pred[0] < 0.5
+            results[idx] = pred[0] < 0.5  # Assumes <0.5 = junk
         
         return results
 
