@@ -15,6 +15,21 @@ def build_filter_query(constraints: HardConstraints) -> Dict[str, Any]:
     if constraints.location_province: query["location_province"] = constraints.location_province
     return query
 
+def build_vector_search_filter(constraints: HardConstraints) -> Dict[str, Any]:
+    filter_conditions = {}
+    # Lưu ý: budget_range thường là string đơn, các tag khác giờ là array
+    if constraints.budget_range: 
+        filter_conditions["budget_range"] = {"$eq": constraints.budget_range}
+    if constraints.available_time: 
+        filter_conditions["available_time"] = {"$eq": constraints.available_time}
+    if constraints.companion_tag: 
+        filter_conditions["companion_tag"] = {"$eq": constraints.companion_tag}
+    if constraints.season_tag: 
+        filter_conditions["season_tag"] = {"$eq": constraints.season_tag}
+    if constraints.location_province: 
+        filter_conditions["location_province"] = {"$eq": constraints.location_province}
+    return filter_conditions
+
 # --- 1. GET LIST (PAGINATION) ---
 def get_destinations_paginated(filters: HardConstraints, page: int = 1, limit: int = 10) -> Dict[str, Any]:
     collection = get_db_collection()
@@ -86,7 +101,7 @@ def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardC
     }
     
     if hard_constraints:
-        search_filter = build_filter_query(hard_constraints)
+        search_filter = build_vector_search_filter(hard_constraints)
         if search_filter:
             vector_search_stage["$vectorSearch"]["filter"] = search_filter
 
@@ -100,7 +115,6 @@ def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardC
     try:
         results = list(collection.aggregate(pipeline))
         
-        # Mapping ID (quan trọng)
         for doc in results:
             doc["id"] = str(doc.get("landmark_id", doc.get("_id", "")))
             if "_id" in doc: del doc["_id"]
