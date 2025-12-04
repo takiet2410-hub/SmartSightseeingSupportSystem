@@ -25,12 +25,12 @@ if not os.path.exists(CSV_FILE):
 # --- BIẾN MÔI TRƯỜNG CHO DATABASE ---
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
-
+DURING_COLLECTION = os.getenv("DURING_COLLECTION")
+BEFORE_COLLECTION = os.getenv("BEFORE_COLLECTION")
 # --- BIẾN KHÁC ---
 BATCH_SIZE = 100 # Kích thước lô mặc định
 
-if not MONGO_URI or not DB_NAME or not COLLECTION_NAME:
+if not MONGO_URI or not DB_NAME or not DURING_COLLECTION or not BEFORE_COLLECTION:
     raise EnvironmentError(
-        "❌ Vui lòng kiểm tra lại file .env! Các biến MONGO_URI, DB_NAME, COLLECTION_NAME là bắt buộc."
+        "❌ Vui lòng kiểm tra lại file .env! Các biến MONGO_URI, DB_NAME, DURING_COLLECTION, BEFORE_COLLECTION là bắt buộc."
     )
