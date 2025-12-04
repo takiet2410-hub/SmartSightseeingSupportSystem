@@ -1,9 +1,9 @@
 # db.py
 
 from pymongo import MongoClient
-from config import MONGO_URI, DB_NAME, COLLECTION_NAME
+from config import MONGO_URI, DB_NAME, DURING_COLLECTION
 
-def get_mongo_collection(client=None, db_name=DB_NAME, collection_name=COLLECTION_NAME):
+def get_mongo_collection(client=None, db_name=DB_NAME, during_collection=DURING_COLLECTION):
     """
     Khởi tạo và trả về đối tượng MongoDB Collection.
     """
@@ -19,5 +19,5 @@ def get_mongo_collection(client=None, db_name=DB_NAME, collection_name=COLLECTIO
             raise ConnectionError("Không thể kết nối tới MongoDB Atlas.")
 
     db = client[db_name]
-    collection = db[collection_name]
+    collection = db[during_collection]
     return collection, client

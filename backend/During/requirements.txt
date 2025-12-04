@@ -1,4 +1,9 @@
+torch
+torchvision
+torchaudio
+transformers
 sentence-transformers
+
 Pillow
 pandas
 requests
@@ -6,4 +11,12 @@ tqdm
 pymongo
 beautifulsoup4
 openpyxl
-tabulate
+tabulate 
+fastapi
+dotenv
+python-multipart
+uvicorn
+
+
+
+scikit-learn
