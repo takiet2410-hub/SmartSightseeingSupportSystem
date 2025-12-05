@@ -73,39 +73,53 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 MAX_FILES = 500
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
-def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes = None):
+def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes = None, force_reencode: bool = False):
     """
-    🚀 V2.1: Save original quality for display
-    - Priority 1: Save original bytes (no re-encoding)
-    - Priority 2: Save high-quality JPEG (100%)
+    🚀 V2.2: Save original quality for display with HEIC fix
+    - Priority 1: Save original bytes (no re-encoding) IF not HEIC
+    - Priority 2: Re-encode HEIC as proper JPEG
+    - Priority 3: Save high-quality JPEG (95%)
     """
     try:
-        if original_bytes:
-            # Best option: Save original bytes directly (no quality loss)
+        # HEIC files MUST be re-encoded (browsers can't display HEIC)
+        if force_reencode or not original_bytes:
+            # Force RGB mode
+            if img_full.mode != 'RGB':
+                img_full = img_full.convert('RGB')
+            
+            # Save as clean JPEG
+            img_full.save(path, "JPEG", quality=95, optimize=True, progressive=True)
+        else:
+            # Non-HEIC: Save original bytes directly (no quality loss)
             with open(path, 'wb') as f:
                 f.write(original_bytes)
-        else:
-            # Fallback: Save high quality with EXIF preservation
-            if hasattr(img_full, 'info'):
-                exif_bytes = img_full.info.get("exif")
-                if exif_bytes:
-                    img_full.save(path, "JPEG", quality=95, exif=exif_bytes, optimize=True, progressive=True)
-                    return
-            img_full.save(path, "JPEG", quality=95, optimize=True, progressive=True)
+                
     except Exception as e:
-        logger.warning(f"Save failed: {e}")
+        logger.warning(f"Save failed: {e}, falling back to re-encode")
+        # Fallback: Always re-encode on error
+        if img_full.mode != 'RGB':
+            img_full = img_full.convert('RGB')
+        img_full.save(path, "JPEG", quality=95, optimize=True)
 
 def compute_image_hash(content: bytes) -> str:
     """🚀 V2: Fast hash for duplicate detection"""
     return hashlib.md5(content).hexdigest()
 
-def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, Image.Image, bytes]:
+def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, Image.Image, bytes, bool]:
     """
-    🚀 V2.1: Load image once, return both versions
+    🚀 V2.2: Load image once, return both versions + HEIC detection
     - img_full: Full resolution for display
     - img_thumb: Thumbnail for fast ML processing
     - content: Original bytes for lossless save
+    - is_heic: Flag to force re-encoding
     """
+    # Detect HEIC format by checking magic bytes
+    is_heic = (
+        content[:12].find(b'heic') != -1 or 
+        content[:12].find(b'heix') != -1 or
+        content[:12].find(b'mif1') != -1  # Some HEIC variants
+    )
+    
     img_full = Image.open(io.BytesIO(content))
     img_full.load()
     img_full = img_full.convert("RGB")
@@ -114,7 +128,7 @@ def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, Image.Image, by
     img_thumb = img_full.copy()
     img_thumb.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
     
-    return img_full, img_thumb, content
+    return img_full, img_thumb, content, is_heic
 
 async def process_single_photo(
     file: UploadFile,
@@ -143,21 +157,22 @@ async def process_single_photo(
             loop = asyncio.get_event_loop()
             
             # 🚀 V2.1: Load once, get both full-res and thumbnail
-            img_full, img_thumb, raw_content = await loop.run_in_executor(
+            img_full, img_thumb, raw_content, is_heic = await loop.run_in_executor(
                 executor, load_and_prepare_image, content
             )
             
+            metadata_task = loop.run_in_executor(
+                executor, extractor.get_metadata_from_image, img_full
+            )
+
             # 🚀 V2.1: Save ORIGINAL quality for frontend display
             await loop.run_in_executor(
-                executor, save_image_to_disk, img_full, temp_path, raw_content
+                executor, save_image_to_disk, img_full, temp_path, None if is_heic else raw_content, is_heic
             )
             
             # 🚀 V2.1: Use THUMBNAIL for all processing (faster)
             lighting_task = loop.run_in_executor(
                 executor, lighting_filter.analyze_from_image, img_thumb
-            )
-            metadata_task = loop.run_in_executor(
-                executor, extractor.get_metadata, temp_path
             )
             
             is_good_light, light_reason = await lighting_task

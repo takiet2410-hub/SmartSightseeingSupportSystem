@@ -14,6 +14,49 @@ class MetadataExtractor:
         # 🚀 V2.1: Cache parsed EXIF data to avoid re-parsing
         self._cache = {}
     
+    def get_metadata_from_image(self, pil_image: Image.Image) -> Dict[str, Any]:
+        """
+        🚀 V2.3: Extract metadata from PIL Image object directly
+        This preserves metadata from HEIC files before re-encoding
+        """
+        result = {"timestamp": None, "latitude": None, "longitude": None}
+    
+        try:
+            # Extract EXIF data from PIL Image object
+            exif_data = None
+        
+            # Method 1: Try getexif() (works for JPEG, PNG, HEIC)
+            if hasattr(pil_image, 'getexif') and callable(pil_image.getexif):
+                exif_dict = pil_image.getexif()
+                if exif_dict:
+                    exif_data = dict(exif_dict)
+        
+            # Method 2: Try _getexif() for older PIL versions
+            elif hasattr(pil_image, '_getexif') and callable(pil_image._getexif):
+                exif_data = pil_image._getexif()
+        
+            if not exif_data:
+                return result
+
+            # Extract timestamp (Tag 36867 = DateTimeOriginal)
+            date_str = exif_data.get(36867) or exif_data.get(306)  # 306 = DateTime (fallback)
+            if date_str:
+                try:
+                    result["timestamp"] = datetime.strptime(str(date_str), "%Y:%m:%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    pass
+
+            # Extract GPS (Tag 34853)
+            gps_info = exif_data.get(34853)
+            if gps_info:
+                result["latitude"], result["longitude"] = self._parse_gps(gps_info)
+        
+            return result
+        
+        except Exception as e:
+            logger.error(f"Metadata extraction from PIL failed: {e}")
+            return result
+
     def get_metadata(self, file_path: str) -> Dict[str, Any]:
         """Extract metadata from file path (with caching)"""
         
