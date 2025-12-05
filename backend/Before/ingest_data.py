@@ -20,14 +20,14 @@ def standardize_text(text):
     text = text.replace('\u2013', '-').replace('\u2014', '-')
     return text.strip().lower()
 
-# 2. HÀM TÁCH CHUỖI DÙNG DẤU CHẤM PHẨY (;)
+# 2. HÀM TÁCH CHUỖI DÙNG DẤU CHẤM PHẨY (,)
 def process_tags_to_array(text_input):
     if not text_input:
         return []
     
     text_str = str(text_input)
     # Tách bằng dấu chấm phẩy
-    raw_tags = text_str.split(';')
+    raw_tags = text_str.split(',')
     
     cleaned_tags = []
     for tag in raw_tags:

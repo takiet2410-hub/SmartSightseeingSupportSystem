@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import unicodedata
 import os
+import requests 
+from fastapi.security import OAuth2PasswordRequestForm
 
 # Import modules
 from schemas import (
@@ -15,6 +17,8 @@ from modules.retrieval import retrieve_context, get_destinations_paginated, get_
 from modules.generation import build_rag_prompt, call_llm_api, parse_llm_response
 from modules.weather import get_current_weather
 from core.config import settings
+
+import favourite
 
 # Khởi tạo Vectorizer
 vectorizer = HybridVectorizer()
@@ -42,6 +46,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.post("/login-proxy", tags=["Auth Proxy"])
+def login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    API này nhận Form Data từ Swagger UI, 
+    sau đó chuyển thành JSON để gọi sang Auth Server (Port 8000).
+    """
+    auth_url = "http://localhost:8000/auth/login" # Đường dẫn tới Auth Server thật
+    
+    # Chuyển đổi dữ liệu Form -> JSON
+    payload = {
+        "username": form_data.username,
+        "password": form_data.password
+    }
+    
+    try:
+        # Gọi sang Auth Server
+        response = requests.post(auth_url, json=payload)
+        
+        # Nếu Auth Server báo lỗi (sai pass...), ta báo lỗi theo
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=response.json().get("detail", "Login failed")
+            )
+            
+        # Trả về Token cho Swagger UI
+        return response.json()
+        
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Không kết nối được với Auth Server (Port 8000)")
+
+
+# API này yêu cầu Token (được validate bởi deps.py trong router này)
+app.include_router(favourite.router, prefix="/favorites", tags=["User Favorites"])
 
 # ==========================================
 # API 1: LẤY DANH SÁCH & FILTER (Mặc định)
@@ -177,4 +216,4 @@ async def semantic_search(request: SearchRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
