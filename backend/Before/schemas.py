@@ -1,5 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
+from enum import Enum
+
+# --- 0. ENUM CHO SẮP XẾP ---
+class SortOption(str, Enum):
+    RATING_DESC = "Đánh giá cao nhất" # (Mặc định)
+    RATING_ASC = "Đánh giá thấp nhất"  
+    NAME_ASC = "Tên A-Z"      
+    NAME_DESC = "Tên Z-A" 
 
 # --- 1. COMMON SCHEMAS ---
 class WeatherInfo(BaseModel):

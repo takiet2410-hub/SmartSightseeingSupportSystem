@@ -5,6 +5,7 @@ import unicodedata
 import os
 import requests 
 from fastapi.security import OAuth2PasswordRequestForm
+from schemas import SortOption
 
 # Import modules
 from schemas import (
@@ -88,11 +89,12 @@ app.include_router(favourite.router, prefix="/favorites", tags=["User Favorites"
 @app.get("/destinations", response_model=PaginatedResponse)
 async def list_destinations(
     filters: HardConstraints = Depends(),
+    sort_by: SortOption = Query(SortOption.RATING_DESC, description="Sắp xếp theo: Tên (A-Z) hoặc Rating"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50)
 ):
     """Hiển thị danh sách địa điểm theo trang và bộ lọc cơ bản (Không dùng AI)"""
-    return get_destinations_paginated(filters, page, limit)
+    return get_destinations_paginated(filters, sort_by, page, limit)
 
 # ==========================================
 # API 2: LẤY CHI TIẾT (Khi click vào card)

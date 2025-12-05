@@ -1,5 +1,5 @@
 from core.db import get_db_collection
-from schemas import HardConstraints
+from schemas import HardConstraints, SortOption
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 import math
@@ -31,7 +31,7 @@ def build_vector_search_filter(constraints: HardConstraints) -> Dict[str, Any]:
     return filter_conditions
 
 # --- 1. GET LIST (PAGINATION) ---
-def get_destinations_paginated(filters: HardConstraints, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption, page: int = 1, limit: int = 10) -> Dict[str, Any]:
     collection = get_db_collection()
     query = build_filter_query(filters)
 
@@ -48,17 +48,26 @@ def get_destinations_paginated(filters: HardConstraints, page: int = 1, limit: i
         "overall_rating": 1
     }
     
+    mongo_sort = [("overall_rating", -1)] 
+    
+    if sort_option == SortOption.NAME_ASC:
+        mongo_sort = [("name", 1)] # A-Z
+    elif sort_option == SortOption.NAME_DESC:
+        mongo_sort = [("name", -1)] # Z-A
+    elif sort_option == SortOption.RATING_ASC:
+        mongo_sort = [("overall_rating", 1)] # Rating thấp lên cao
+    elif sort_option == SortOption.RATING_DESC:
+        mongo_sort = [("overall_rating", -1)] # Rating cao xuống thấp
+        
+    # Áp dụng sort vào cursor
     cursor = collection.find(query, projection)\
-                       .sort("overall_rating", -1)\
+                       .sort(mongo_sort)\
                        .skip((page - 1) * limit)\
                        .limit(limit)
     
     results = []
     for doc in cursor:
-        # 2. MAPPING DỮ LIỆU: Gán landmark_id vào id cho đúng Schema
-        # Dùng str() để chắc chắn nó là string, và .get() để tránh lỗi nếu null
         doc["id"] = str(doc.get("landmark_id", "")) 
-        
         results.append(doc)
         
     return {
@@ -68,7 +77,6 @@ def get_destinations_paginated(filters: HardConstraints, page: int = 1, limit: i
         "limit": limit,
         "total_pages": total_pages
     }
-
 # --- 2. GET DETAIL BY ID ---
 def get_destination_details(landmark_id: str) -> Optional[Dict[str, Any]]:
     collection = get_db_collection()
