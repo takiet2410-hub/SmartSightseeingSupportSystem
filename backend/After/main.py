@@ -122,7 +122,11 @@ def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, Image.Image, by
     
     img_full = Image.open(io.BytesIO(content))
     img_full.load()
+    exif_raw = img_full.info.get('exif')
     img_full = img_full.convert("RGB")
+
+    if exif_raw:
+        img_full.info['exif'] = exif_raw
     
     # Create thumbnail for ML processing (speed optimization)
     img_thumb = img_full.copy()

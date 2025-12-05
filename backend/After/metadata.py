@@ -23,13 +23,22 @@ class MetadataExtractor:
     
         try:
             # Extract EXIF data from PIL Image object
-            exif_data = None
+            exif_data = {}
         
             # Method 1: Try getexif() (works for JPEG, PNG, HEIC)
             if hasattr(pil_image, 'getexif') and callable(pil_image.getexif):
-                exif_dict = pil_image.getexif()
-                if exif_dict:
-                    exif_data = dict(exif_dict)
+                exif_obj = pil_image.getexif()
+                if exif_obj:
+                    exif_data = dict(exif_obj)
+                    
+                    # 🔧 FIX 2: Explicitly fetch the GPS sub-dictionary
+                    # Tag 34853 is the standard pointer to GPS Info
+                    try:
+                        gps_data = exif_obj.get_ifd(34853)
+                        if gps_data:
+                            exif_data[34853] = gps_data
+                    except Exception:
+                        pass
         
             # Method 2: Try _getexif() for older PIL versions
             elif hasattr(pil_image, '_getexif') and callable(pil_image._getexif):

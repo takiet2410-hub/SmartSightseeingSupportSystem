@@ -235,7 +235,7 @@ class CurationService:
             total_weight = left_weight + right_weight
             
             if total_weight > 0:
-                balance = 1.0 - abs(left_weight - right_weight) / total_weight
+                balance = 1.0 - abs(float(left_weight) - float(right_weight)) / total_weight
             else:
                 balance = 0.5
             

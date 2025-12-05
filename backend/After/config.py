@@ -1,5 +1,8 @@
 import os
 import tempfile
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Temp directory for processing
 TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(tempfile.gettempdir(), "smart-album-uploads"))
