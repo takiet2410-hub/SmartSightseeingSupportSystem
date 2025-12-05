@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     libgcc-s1 \
+    libheif1 \
+    libheif-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

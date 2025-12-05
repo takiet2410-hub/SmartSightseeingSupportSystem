@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -20,8 +20,30 @@ class PhotoOutput(BaseModel):
     timestamp: Optional[datetime]
     score: float = 0.0
     image_url: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 class Album(BaseModel):
     title: str
     method: str
     photos: List[PhotoOutput]
+
+class ManualLocationInput(BaseModel):
+    album_title: str  # Album title to identify which album
+    name: str         # Custom location name
+    lat: float
+    lon: float
+
+class TripSummaryRequest(BaseModel):
+    album_data: Dict[str, Any]  # Album data from /create-album endpoint
+    manual_locations: List[ManualLocationInput] = []
+
+class TripSummaryResponse(BaseModel):
+    trip_title: str
+    total_distance_km: float
+    total_locations: int
+    total_photos: int
+    start_date: str
+    end_date: str
+    map_image_url: str
+    timeline: List[str]

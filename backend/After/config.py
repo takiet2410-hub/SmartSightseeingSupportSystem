@@ -8,3 +8,5 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 # Processed images directory (persisted for serving)
 PROCESSED_DIR = os.getenv("PROCESSED_DIR", os.path.join(tempfile.gettempdir(), "smart-album-processed"))
 os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyB8whufexe1I__18_8dti0H2ZheZorTgUw")

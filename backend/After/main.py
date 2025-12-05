@@ -22,7 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from config import TEMP_DIR, PROCESSED_DIR
 from metadata import MetadataExtractor
 from clustering.service import ClusteringService, get_model as get_clip_model
-from schemas import PhotoInput
+from schemas import PhotoInput, TripSummaryRequest, TripSummaryResponse
+from summary_service import SummaryService
 from filters.lighting import LightingFilter
 from filters.junk_detector import is_junk_batch, get_model as get_junk_model
 from logger_config import logger
@@ -252,9 +253,15 @@ async def create_album(files: List[UploadFile] = File(...)):
         for album in albums:
             for photo in album.photos:
                 original = next((p for p in valid_inputs if p.filename == photo.filename), None)
-                if original and original.local_path and os.path.exists(original.local_path):
-                    image_filename = os.path.basename(original.local_path)
-                    photo.image_url = f"/images/{image_filename}"
+                if original:
+                    # Add image URL
+                    if original.local_path and os.path.exists(original.local_path):
+                        image_filename = os.path.basename(original.local_path)
+                        photo.image_url = f"/images/{image_filename}"
+                    
+                    # Add GPS coordinates to PhotoOutput
+                    photo.lat = original.latitude
+                    photo.lon = original.longitude
         
         logger.info(f"Created {len(albums)} albums")
         return {"albums": albums}
@@ -291,6 +298,27 @@ async def cleanup_images():
         
         return {"status": "success", "deleted": count, "cache_cleared": True}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/summary/create", response_model=TripSummaryResponse)
+async def create_trip_summary(request: TripSummaryRequest):
+    """
+    Generate trip summary with map and statistics
+    """
+    try:
+        summary_service = SummaryService()
+        
+        # Convert Pydantic models to dicts
+        manual_locs_dict = [m.dict() for m in request.manual_locations]
+        
+        result = summary_service.generate_summary(
+            album_data=request.album_data,
+            manual_locations=manual_locs_dict
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Trip summary generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
