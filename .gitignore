@@ -1,0 +1,22 @@
+# Ignore Visual Studio Code settings folder
+.vscode/
+
+# Ignore Python bytecode files
+__pycache__/
+
+# Ignore environment variable files
+.env
+
+# Ignore static files
+static/*
+
+# Ignore log files
+logs/*
+
+# Ignore test related files
+test_photos
+test_local.py
+
+.dockerignore
+temp/
+processed/
