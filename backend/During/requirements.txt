@@ -20,3 +20,5 @@ uvicorn
 
 
 scikit-learn
+
+pyjwt
