@@ -6,16 +6,18 @@ os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 warnings.filterwarnings('ignore')
 
 import asyncio
-import io
+import io   
 import uuid
 import hashlib
 from typing import List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+import uuid
+from datetime import datetime
 
 from PIL import Image
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -30,6 +32,8 @@ from filters.junk_detector import is_junk_batch, get_model as get_junk_model
 from logger_config import logger
 from curation_service import CurationService
 from cloudinary_service import CloudinaryService
+from deps import get_current_user_id
+from db import album_collection
 
 # 🚀 V2: Simple in-memory cache for duplicate detection
 _processed_cache = {}
@@ -142,39 +146,40 @@ async def process_single_photo(file: UploadFile, extractor: MetadataExtractor, l
 
 # --- API CREATE ALBUM (ĐÃ SỬA THEO SCHEMA MỚI) ---
 @app.post("/create-album")
-async def create_album(files: List[UploadFile] = File(...)):
+async def create_album(
+    files: List[UploadFile] = File(...),
+    current_user_id: str = Depends(get_current_user_id) # Bắt buộc Login
+):
     if len(files) > MAX_FILES:
-        raise HTTPException(status_code=413, detail=f"Too many files. Max: {MAX_FILES}")
+        raise HTTPException(413, f"Too many files (Max {MAX_FILES})")
     
-    logger.info(f"Processing {len(files)} photos...")
+    logger.info(f"Processing {len(files)} photos for User {current_user_id}...")
+    
     extractor = MetadataExtractor()
-    lighting_filter = LightingFilter()
+    lighting = LightingFilter()
     curator = CurationService()
     
-    tasks = [process_single_photo(file, extractor, lighting_filter, curator) for file in files]
-    photo_inputs = await asyncio.gather(*tasks, return_exceptions=True)
+    tasks = [process_single_photo(f, extractor, lighting, curator) for f in files]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    valid_inputs = [p for p in photo_inputs if p is not None and not isinstance(p, Exception)]
+    valid_inputs = [p for p in results if p and not isinstance(p, Exception)]
     if not valid_inputs:
-        raise HTTPException(status_code=500, detail="All photos failed to process")
+        raise HTTPException(500, "All photos failed")
 
-    # Junk Filter
-    non_rejected = [p for p in valid_inputs if not p.is_rejected and p.local_path]
-    if non_rejected:
+    # Junk Check
+    clean_photos = [p for p in valid_inputs if not p.is_rejected and p.local_path]
+    if clean_photos:
         loop = asyncio.get_event_loop()
-        paths = [p.local_path for p in non_rejected]
-        junk_results = await loop.run_in_executor(executor, is_junk_batch, paths)
-        for photo, is_junk in zip(non_rejected, junk_results):
+        paths = [p.local_path for p in clean_photos]
+        junk_res = await loop.run_in_executor(executor, is_junk_batch, paths)
+        for p, is_junk in zip(clean_photos, junk_res):
             if is_junk:
-                photo.is_rejected = True
-                photo.rejected_reason = "AI Detected Junk"
+                p.is_rejected = True
+                p.rejected_reason = "AI Detected Junk"
 
     try:
-        # 1. Gom cụm (Clustering)
-        # Lưu ý: ClusteringService trả về list các Album nội bộ, ta sẽ convert lại ở bước cuối
+        # 1. Clustering
         raw_albums = ClusteringService.dispatch(valid_inputs)
-        
-        # Map nhanh để tra cứu dữ liệu gốc (lấy lat/lon, local_path)
         original_map = {p.filename: p for p in valid_inputs}
         
         # 2. Upload Cloudinary
@@ -184,68 +189,97 @@ async def create_album(files: List[UploadFile] = File(...)):
                 continue
             safe_tag = "".join(c for c in album.title if c.isalnum() or c in ('-', '_'))
             for photo in album.photos:
-                original = original_map.get(photo.filename)
-                if original and original.local_path and os.path.exists(original.local_path):
-                    upload_queue.append((original.local_path, safe_tag))
-
+                orig = original_map.get(photo.filename)
+                if orig and orig.local_path and os.path.exists(orig.local_path):
+                    upload_queue.append((orig.local_path, safe_tag))
+        
         uploaded_map = cloud_service.upload_batch(upload_queue)
         
-        # 3. Xây dựng Response chuẩn theo Schema Mới
-        final_albums_response = []
-
+        # 3. Build Response & Save DB
+        final_albums = []
+        db_inserts = []
+        
         for album in raw_albums:
             is_junk = album.method == "filters_rejected" or "Review Needed" in album.title
             safe_tag = "".join(c for c in album.title if c.isalnum() or c in ('-', '_'))
             
-            # Xử lý danh sách ảnh output chuẩn schema PhotoOutput
+            # [QUAN TRỌNG] Tạo ID ở đây để không bị lỗi "album_id is not defined"
+            album_id = str(uuid.uuid4()) 
+
             output_photos = []
+            db_photos = []
             has_cloud_photo = False
-
+            
             for photo in album.photos:
-                original = original_map.get(photo.filename)
-                if not original: continue
-
-                # Xác định URL
+                orig = original_map.get(photo.filename)
+                if not orig: continue
+                
+                # Url
                 img_url = None
-                if not is_junk and original.local_path in uploaded_map:
-                    img_url = uploaded_map[original.local_path]
+                if not is_junk and orig.local_path in uploaded_map:
+                    img_url = uploaded_map[orig.local_path]
                     has_cloud_photo = True
-                elif original.local_path:
-                    img_url = f"/images/{os.path.basename(original.local_path)}"
-
-                # Mapping sang PhotoOutput (CHÚ Ý: latitude -> lat, longitude -> lon)
+                elif orig.local_path:
+                    img_url = f"/images/{os.path.basename(orig.local_path)}"
+                
+                # Output Object
                 p_out = PhotoOutput(
-                    id=photo.id,
-                    filename=photo.filename,
-                    timestamp=photo.timestamp,
-                    score=photo.score,
-                    image_url=img_url,
-                    lat=original.latitude,  # <--- Map field này
-                    lon=original.longitude  # <--- Map field này
+                    id=photo.id, filename=photo.filename, timestamp=photo.timestamp,
+                    score=photo.score, image_url=img_url, 
+                    lat=orig.latitude, lon=orig.longitude
                 )
                 output_photos.append(p_out)
+                
+                # DB Object (Dict)
+                p_dict = p_out.dict()
+                if p_dict['timestamp']: p_dict['timestamp'] = p_dict['timestamp'].isoformat()
+                db_photos.append(p_dict)
             
-            # Tạo link Zip (chỉ nếu album sạch và có ảnh trên cloud)
+            # Zip & Cover
             zip_url = None
+            cover_url = None
             if not is_junk and has_cloud_photo:
                 zip_url = cloud_service.create_album_zip_link(safe_tag)
-
-            # Tạo Album Output (KHÔNG có cover_photo_url theo schema mới)
+                if output_photos and output_photos[0].image_url:
+                    cover_url = output_photos[0].image_url
+            
+            # Final Object
             album_out = Album(
+                id=album_id,
+                user_id=current_user_id,
                 title=album.title,
                 method=album.method,
                 download_zip_url=zip_url,
-                photos=output_photos
+                photos=output_photos,
+                created_at=datetime.utcnow()
             )
-            final_albums_response.append(album_out)
+            final_albums.append(album_out)
+            
+            # Save to DB (Chỉ lưu album sạch)
+            if not is_junk:
+                doc = album_out.dict()
+                doc['_id'] = album_id # Mongo Primary Key
+                db_inserts.append(doc)
+        
+        if db_inserts:
+            album_collection.insert_many(db_inserts)
+            logger.info(f"Saved {len(db_inserts)} albums for User {current_user_id}")
+            
+        return {"albums": final_albums}
 
-        logger.info(f"Created {len(final_albums_response)} albums")
-        return {"albums": final_albums_response}
-    
     except Exception as e:
-        logger.error(f"Clustering error: {e}")
+        logger.error(f"Logic Error: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(500, detail=str(e))
+    
+@app.get("/my-albums", response_model=List[Album])
+async def get_my_albums(current_user_id: str = Depends(get_current_user_id)):
+    try:
+        # Tìm các album có user_id tương ứng
+        cursor = album_collection.find({"user_id": current_user_id}).sort("created_at", -1)
+        return [doc for doc in cursor]
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")

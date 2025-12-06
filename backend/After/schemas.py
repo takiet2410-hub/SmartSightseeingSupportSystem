@@ -26,6 +26,8 @@ class PhotoOutput(BaseModel):
 class Album(BaseModel):
     title: str
     method: str
+    id: str = Field(..., description="Unique Album ID")
+    user_id: str = Field(..., description="Owner User ID")
     download_zip_url: Optional[str] = None
     photos: List[PhotoOutput]
 
