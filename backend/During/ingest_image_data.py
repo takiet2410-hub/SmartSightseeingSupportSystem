@@ -6,7 +6,7 @@ import pandas as pd
 import os
 import glob  # <--- Thư viện quan trọng để tìm file bất chấp đuôi
 from tqdm import tqdm
-from core.db import get_mongo_collection
+from shared_resources import get_mongo_collection
 
 # --- CẤU HÌNH IMPORT TỪ FILE CONFIG ---
 # Nếu file config.py của bạn thiếu biến nào, hãy thêm vào hoặc định nghĩa trực tiếp ở đây
