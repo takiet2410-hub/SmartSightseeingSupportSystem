@@ -19,7 +19,7 @@ from modules.generation import build_rag_prompt, call_llm_api, parse_llm_respons
 from modules.weather import get_current_weather
 from core.config import settings
 
-import favourite
+import favorites
 
 # Khởi tạo Vectorizer
 vectorizer = HybridVectorizer()
@@ -81,7 +81,7 @@ def login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 # API này yêu cầu Token (được validate bởi deps.py trong router này)
-app.include_router(favourite.router, prefix="/favorites", tags=["User Favorites"])
+app.include_router(favorites.router, prefix="/favorites", tags=["User Favorites"])
 
 # ==========================================
 # API 1: LẤY DANH SÁCH & FILTER (Mặc định)

@@ -9,27 +9,37 @@ import json
 def build_filter_query(constraints: HardConstraints) -> Dict[str, Any]:
     query = {}
     if constraints.budget_range: query["budget_range"] = constraints.budget_range
-    if constraints.available_time: query["available_time"] = constraints.available_time
-    if constraints.companion_tag: query["companion_tag"] = constraints.companion_tag
-    if constraints.season_tag: query["season_tag"] = constraints.season_tag
+    
+    if constraints.available_time: 
+        query["available_time"] = {"$in": constraints.available_time}
+        
+    if constraints.companion_tag: 
+        query["companion_tag"] = {"$in": constraints.companion_tag}
+        
+    if constraints.season_tag: 
+        query["season_tag"] = {"$in": constraints.season_tag}
+        
     if constraints.location_province: query["location_province"] = constraints.location_province
     return query
 
 def build_vector_search_filter(constraints: HardConstraints) -> Dict[str, Any]:
     filter_conditions = {}
-    # Lưu ý: budget_range thường là string đơn, các tag khác giờ là array
     if constraints.budget_range: 
         filter_conditions["budget_range"] = {"$eq": constraints.budget_range}
-    if constraints.available_time: 
-        filter_conditions["available_time"] = {"$eq": constraints.available_time}
-    if constraints.companion_tag: 
-        filter_conditions["companion_tag"] = {"$eq": constraints.companion_tag}
-    if constraints.season_tag: 
-        filter_conditions["season_tag"] = {"$eq": constraints.season_tag}
+        
     if constraints.location_province: 
         filter_conditions["location_province"] = {"$eq": constraints.location_province}
-    return filter_conditions
 
+    if constraints.available_time: 
+        filter_conditions["available_time"] = {"$in": constraints.available_time}
+        
+    if constraints.companion_tag: 
+        filter_conditions["companion_tag"] = {"$in": constraints.companion_tag}
+        
+    if constraints.season_tag: 
+        filter_conditions["season_tag"] = {"$in": constraints.season_tag}
+        
+    return filter_conditions
 # --- 1. GET LIST (PAGINATION) ---
 def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption, page: int = 1, limit: int = 10) -> Dict[str, Any]:
     collection = get_db_collection()
@@ -117,7 +127,21 @@ def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardC
         vector_search_stage,
         {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
         {"$sort": {"score": -1}}, 
-        {"$limit": 20} 
+        {"$limit": 20},
+        {"$project": {
+                "landmark_id": 1,
+                "name": 1,
+                "description": 1,
+                "location_province": 1,
+                "image_urls": 1,
+                "overall_rating": 1,
+                "score": 1,
+                "season_tag": 1,
+                "budget_range": 1,
+                "available_time": 1,
+                "companion_tag": 1
+            }
+        }
     ]
     
     try:

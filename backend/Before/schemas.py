@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
 from enum import Enum
+from fastapi import Query
 
 # --- 0. ENUM CHO SẮP XẾP ---
 class SortOption(str, Enum):
@@ -18,9 +19,9 @@ class WeatherInfo(BaseModel):
 class HardConstraints(BaseModel):
     # Dùng cho cả filter danh sách và AI
     budget_range: Optional[str] = Field(default=None, description="Ngân sách")
-    available_time: Optional[str] = Field(default=None, description="Thời gian rảnh")
-    companion_tag: Optional[str] = Field(default=None, description="Bạn đồng hành")
-    season_tag: Optional[str] = Field(default=None, description="Mùa")
+    available_time: Optional[List[str]] = Field(default=None, description="Thời gian rảnh")
+    companion_tag: Optional[List[str]] = Field(default=None, description="Bạn đồng hành")
+    season_tag: Optional[List[str]] = Field(default=None, description="Mùa")
     location_province: Optional[str] = Field(default=None, description="Lọc theo tỉnh thành")
 
 # --- 2. PAGINATION & LIST VIEW SCHEMAS ---
@@ -78,7 +79,5 @@ class SearchRequest(BaseModel):
     hard_constraints: Optional[HardConstraints] = Field(default=None, description="Bộ lọc cứng kèm theo")
 
 class SearchResponse(BaseModel):
-    # Trả về danh sách DestinationSummary (giống API danh sách) cho nhẹ
-    # Hoặc dùng DestinationDetailResponse nếu muốn full info
     data: List[DestinationSummary] 
     total_found: int
