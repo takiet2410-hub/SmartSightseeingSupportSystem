@@ -20,6 +20,8 @@ import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import requests
+from fastapi.security import OAuth2PasswordRequestForm
 
 from config import TEMP_DIR, PROCESSED_DIR
 from metadata import MetadataExtractor
@@ -306,6 +308,39 @@ async def create_trip_summary(request: TripSummaryRequest):
     except Exception as e:
         logger.error(f"Summary error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/swagger-login")
+async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    API này chỉ dành cho Swagger UI.
+    Nó nhận Form Data từ Swagger -> Chuyển thành JSON -> Gọi Auth Service.
+    """
+    # 1. Địa chỉ của Auth Service (Port 8001)
+    auth_url = "http://localhost:8001/auth/login"
+    
+    # 2. Chuyển đổi dữ liệu sang JSON
+    payload = {
+        "username": form_data.username,
+        "password": form_data.password
+    }
+    
+    try:
+        # 3. Gọi sang Auth Service
+        response = requests.post(auth_url, json=payload)
+        
+        # 4. Trả kết quả về cho Swagger
+        if response.status_code == 200:
+            return response.json() # Trả về Token
+        else:
+            # Nếu lỗi (sai pass), trả về lỗi y hệt Auth trả về
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=response.json().get("detail", "Login failed")
+            )
+            
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Không kết nối được tới Auth Service (Port 8001)")
+    
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

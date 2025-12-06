@@ -1,8 +1,8 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-
 from pydantic import BaseModel, Field
 
+# --- INPUT MODEL (Dữ liệu đầu vào từ client) ---
 class PhotoInput(BaseModel):
     id: str
     filename: str
@@ -14,6 +14,7 @@ class PhotoInput(BaseModel):
     rejected_reason: str = ""
     score: float = 0.0
 
+# --- OUTPUT MODEL (Dữ liệu trả về cho client) ---
 class PhotoOutput(BaseModel):
     id: str
     filename: str
@@ -24,21 +25,28 @@ class PhotoOutput(BaseModel):
     lon: Optional[float] = None
 
 class Album(BaseModel):
+    # [QUAN TRỌNG] Sửa id và user_id thành Optional = None
+    # Để thuật toán Clustering có thể tạo album tạm mà không bị lỗi
+    id: Optional[str] = None
+    user_id: Optional[str] = None
+    
     title: str
     method: str
-    id: str = Field(..., description="Unique Album ID")
-    user_id: str = Field(..., description="Owner User ID")
     download_zip_url: Optional[str] = None
+    cover_photo_url: Optional[str] = None
     photos: List[PhotoOutput]
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
+# --- MODEL CHO TRIP SUMMARY ---
 class ManualLocationInput(BaseModel):
-    album_title: str  # Album title to identify which album
-    name: str         # Custom location name
+    album_title: str
+    name: str
     lat: float
     lon: float
 
 class TripSummaryRequest(BaseModel):
-    album_data: Dict[str, Any]  # Album data from /create-album endpoint
+    # Dùng Dict để linh hoạt nhận dữ liệu, tránh lỗi validation chặt chẽ
+    album_data: Dict[str, Any] 
     manual_locations: List[ManualLocationInput] = []
 
 class TripSummaryResponse(BaseModel):
