@@ -6,7 +6,8 @@ import torch
 
 # 1. Xác định vị trí
 current_dir = os.path.dirname(os.path.abspath(__file__))
-dotenv_path = os.path.join(current_dir, '.env')
+parent_dir = os.path.dirname(current_dir) 
+dotenv_path = os.path.join(parent_dir, '.env') #đưa thư mục .env vào đúng vị trí bên ngoài core dir.
 
 # --- ĐOẠN DEBUG BẮT ĐẦU (Xóa sau khi fix xong) ---
 print(f"🔍 DEBUG: Đang tìm file .env tại: {dotenv_path}")

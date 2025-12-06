@@ -36,3 +36,7 @@ app.include_router(history_router)
 @app.get("/")
 def read_root():
     return {"status": "Running", "message": "Welcome to Smart Tourism API. Go to /docs for API documentation."}
+
+if __name__ == "__main__":
+    import uvicorn
+    print("Run the server using: uvicorn main:app --reload")
