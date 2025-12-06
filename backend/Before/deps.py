@@ -1,24 +1,28 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+# 1. Đổi import từ OAuth2PasswordBearer sang HTTPBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials 
 from jose import JWTError, jwt
 from core.config import settings
-# SỬA DÒNG NÀY: Import hàm get_users_collection
 from core.db import get_users_collection 
 from bson import ObjectId
 
-# Token URL này trỏ về Auth Server (nếu chạy local thì là localhost:8000/auth/login)
-# Nhưng ở Resource Server, swagger UI chỉ cần biết format token thôi.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login-proxy")
+# 2. Khai báo HTTPBearer thay vì OAuth2PasswordBearer
+# security này không cần tokenUrl, nên Swagger sẽ chỉ hiện ổ nhập Token
+security = HTTPBearer()
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(token_obj: HTTPAuthorizationCredentials = Depends(security)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    # 3. Lấy chuỗi token từ object trả về
+    # HTTPBearer trả về object có dạng: { scheme: "Bearer", credentials: "..." }
+    token = token_obj.credentials 
+
     try:
-        # 1. Giải mã Token
+        # Phần logic giải mã giữ nguyên như cũ
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
         
@@ -28,10 +32,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
         
-    # 2. (Optional) Kiểm tra user có tồn tại trong DB không
-    # Vì bạn đã tách Auth và Resource, Resource server vẫn kết nối chung DB nên check được.
-    
-    # users_col = get_users_collection() # <--- Gọi hàm để lấy collection
+    # (Optional) Kiểm tra user trong DB (giữ nguyên code cũ của bạn)
+    # users_col = get_users_collection()
     # if not users_col.find_one({"_id": ObjectId(user_id)}):
     #     raise credentials_exception
         
