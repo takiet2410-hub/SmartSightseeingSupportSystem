@@ -40,22 +40,27 @@ class CloudinaryService:
 
     def create_album_zip_link(self, album_name: str) -> str:
         """
-        Tạo đường link tải xuống file ZIP chứa tất cả ảnh của Album đó.
-        Cloudinary sẽ tự động gom các ảnh có cùng Tag và nén lại.
+        Tạo file ZIP lưu trữ vĩnh viễn trên Cloudinary (Static Archive).
+        Link trả về sẽ KHÔNG bao giờ hết hạn.
         """
+        # Tạo tag an toàn
         safe_tag = "".join(c for c in album_name if c.isalnum())
         
         try:
-            # Tạo URL download zip dựa trên Tag
-            download_url = cloudinary.utils.download_zip_url(
+            # Sử dụng uploader.create_archive thay vì utils.download_zip_url
+            response = cloudinary.uploader.create_archive(
                 tags=[safe_tag],
-                target_public_id=f"{safe_tag}_album_download", # Tên file zip
+                mode="create",  # <-- Quan trọng: Tạo file thật lưu trên cloud
+                target_public_id=f"{safe_tag}_album_download", # Tên file trên cloud
                 resource_type="image"
             )
-            return download_url
+            
+            # Trả về đường dẫn vĩnh viễn (secure_url)
+            return response.get("secure_url")
+            
         except Exception as e:
-            logger.error(f"Failed to generate zip link: {e}")
-            return ""
+            logger.error(f"Failed to create static zip: {e}")
+            return None # Trả về None nếu lỗi
             
     def upload_batch(self, photos_with_album: list) -> dict:
         """
