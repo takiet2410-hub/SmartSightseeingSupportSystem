@@ -37,6 +37,7 @@ COPY models/ models/
 # Copy main application files
 COPY visual_search.py .
 COPY ingest_image_data.py .
+COPY shared_resoureces.py .
 
 # Copy .env file (make sure it's available in the container)
 # NOTE: Do NOT COPY the local `.env` into the image when deploying to

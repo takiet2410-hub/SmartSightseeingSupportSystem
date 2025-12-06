@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import shared_resources # Import file chứa hàm load resources
-from visual_searchhh import router as visual_search_router # Import Visual Search Router
+from visual_search import router as visual_search_router # Import Visual Search Router
 from detection_history import router as history_router     # Import History Router
 
 # ------------------------------
