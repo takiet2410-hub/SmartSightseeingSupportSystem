@@ -146,17 +146,17 @@ async def process_single_photo(file: UploadFile, extractor: MetadataExtractor, l
             logger.error(f"Error processing {file.filename}: {e}")
             return PhotoInput(id=file.filename, filename=file.filename, local_path="", is_rejected=True, rejected_reason=str(e))
 
-# --- API CREATE ALBUM (ĐÃ SỬA THEO SCHEMA MỚI) ---
 @app.post("/create-album")
 async def create_album(
     files: List[UploadFile] = File(...),
-    current_user_id: str = Depends(get_current_user_id) # Bắt buộc Login
+    current_user_id: str = Depends(get_current_user_id)
 ):
     if len(files) > MAX_FILES:
-        raise HTTPException(413, f"Too many files (Max {MAX_FILES})")
+        raise HTTPException(413, f"Too many files. Max: {MAX_FILES}")
     
     logger.info(f"Processing {len(files)} photos for User {current_user_id}...")
     
+    # 1. Processing (Extract, Light, Score)
     extractor = MetadataExtractor()
     lighting = LightingFilter()
     curator = CurationService()
@@ -168,7 +168,7 @@ async def create_album(
     if not valid_inputs:
         raise HTTPException(500, "All photos failed")
 
-    # Junk Check
+    # 2. Junk Filter
     clean_photos = [p for p in valid_inputs if not p.is_rejected and p.local_path]
     if clean_photos:
         loop = asyncio.get_event_loop()
@@ -180,43 +180,50 @@ async def create_album(
                 p.rejected_reason = "AI Detected Junk"
 
     try:
-        # 1. Clustering
+        # 3. Clustering
         raw_albums = ClusteringService.dispatch(valid_inputs)
         original_map = {p.filename: p for p in valid_inputs}
         
-        # 2. Upload Cloudinary
+        # [SỬA LỖI TẠI ĐÂY] Dùng Dictionary để lưu Tag thay vì setattr
+        album_tags_map = {} 
         upload_queue = []
-        for album in raw_albums:
+        
+        # Dùng enumerate để lấy số thứ tự (index) của album
+        for index, album in enumerate(raw_albums):
             if album.method == "filters_rejected" or "Review Needed" in album.title:
                 continue
-            safe_tag = "".join(c for c in album.title if c.isalnum() or c in ('-', '_'))
+            
+            # Tạo tag
+            safe_tag = "".join(c for c in album.title if c.isalnum() or c in ('-', '_')) + f"_{uuid.uuid4().hex[:4]}"
+            
+            # Lưu vào map theo index
+            album_tags_map[index] = safe_tag
+
             for photo in album.photos:
                 orig = original_map.get(photo.filename)
                 if orig and orig.local_path and os.path.exists(orig.local_path):
                     upload_queue.append((orig.local_path, safe_tag))
         
+        # 4. Upload Cloudinary
         uploaded_map = cloud_service.upload_batch(upload_queue)
         
-        # 3. Build Response & Save DB
+        # 5. Build Response
         final_albums = []
         db_inserts = []
         
-        for album in raw_albums:
+        # Lặp lại với enumerate để lấy lại đúng tag
+        for index, album in enumerate(raw_albums):
             is_junk = album.method == "filters_rejected" or "Review Needed" in album.title
-            safe_tag = "".join(c for c in album.title if c.isalnum() or c in ('-', '_'))
             
-            # [QUAN TRỌNG] Tạo ID ở đây để không bị lỗi "album_id is not defined"
-            album_id = str(uuid.uuid4()) 
-
+            album_id = str(uuid.uuid4())
             output_photos = []
-            db_photos = []
+            db_photos_dict = []
             has_cloud_photo = False
             
             for photo in album.photos:
                 orig = original_map.get(photo.filename)
                 if not orig: continue
                 
-                # Url
                 img_url = None
                 if not is_junk and orig.local_path in uploaded_map:
                     img_url = uploaded_map[orig.local_path]
@@ -224,7 +231,6 @@ async def create_album(
                 elif orig.local_path:
                     img_url = f"/images/{os.path.basename(orig.local_path)}"
                 
-                # Output Object
                 p_out = PhotoOutput(
                     id=photo.id, filename=photo.filename, timestamp=photo.timestamp,
                     score=photo.score, image_url=img_url, 
@@ -232,40 +238,43 @@ async def create_album(
                 )
                 output_photos.append(p_out)
                 
-                # DB Object (Dict)
                 p_dict = p_out.dict()
                 if p_dict['timestamp']: p_dict['timestamp'] = p_dict['timestamp'].isoformat()
-                db_photos.append(p_dict)
+                db_photos_dict.append(p_dict)
             
-            # Zip & Cover
+            # [SỬA LỖI] Lấy tag từ map thay vì getattr
+            safe_tag = album_tags_map.get(index)
+            
             zip_url = None
             cover_url = None
-            if not is_junk and has_cloud_photo:
-                zip_url = cloud_service.create_album_zip_link(safe_tag)
-                if output_photos and output_photos[0].image_url:
-                    cover_url = output_photos[0].image_url
             
-            # Final Object
+            if not is_junk and has_cloud_photo and safe_tag:
+                zip_url = cloud_service.create_album_zip_link(safe_tag)
+                for p in output_photos:
+                    if p.image_url and "cloudinary" in p.image_url:
+                        cover_url = p.image_url
+                        break
+            
             album_out = Album(
                 id=album_id,
                 user_id=current_user_id,
                 title=album.title,
                 method=album.method,
                 download_zip_url=zip_url,
+                cover_photo_url=cover_url,
                 photos=output_photos,
                 created_at=datetime.utcnow()
             )
             final_albums.append(album_out)
             
-            # Save to DB (Chỉ lưu album sạch)
             if not is_junk:
                 doc = album_out.dict()
-                doc['_id'] = album_id # Mongo Primary Key
+                doc['_id'] = album_id
                 db_inserts.append(doc)
         
         if db_inserts:
             album_collection.insert_many(db_inserts)
-            logger.info(f"Saved {len(db_inserts)} albums for User {current_user_id}")
+            logger.info(f"Saved {len(db_inserts)} albums to MongoDB")
             
         return {"albums": final_albums}
 
@@ -341,6 +350,6 @@ async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     except requests.exceptions.ConnectionError:
         raise HTTPException(status_code=503, detail="Không kết nối được tới Auth Service (Port 8001)")
     
-
+ 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
