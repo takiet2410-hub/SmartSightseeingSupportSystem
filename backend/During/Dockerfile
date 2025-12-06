@@ -1,62 +1,41 @@
-# Use lightweight Ubuntu image (CPU only)
-FROM ubuntu:22.04
+# 1. Sử dụng Python 3.10 slim
+FROM python:3.10-slim
 
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTORCH_ENABLE_MPS_FALLBACK=1
+# 2. Thiết lập biến môi trường
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3.10-dev \
-    python3-pip \
-    build-essential \
-    git \
-    wget \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set Python 3.10 as default
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
-    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
-
-# Set working directory
+# 3. Tạo thư mục làm việc
 WORKDIR /app
 
-# Copy requirements file
-COPY requirements.txt .
+# 4. Cài đặt thư viện hệ thống (Sửa lỗi libgl1)
+RUN apt-get update && apt-get install -y \
+    git \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy core folder (configuration and database setup)
-COPY core/ core/
+# 5. Tạo user 'user' (UID 1000) - Bắt buộc cho HF Spaces
+RUN useradd -m -u 1000 user
 
-# Copy models folder (pre-trained model weights)
-COPY models/ models/
+# 6. Copy requirements.txt (nằm ngay cạnh Dockerfile)
+COPY --chown=user requirements.txt .
 
-# Copy main application files
-COPY visual_search.py .
-COPY ingest_image_data.py .
-COPY shared_resoureces.py .
-
-# Copy .env file (make sure it's available in the container)
-# NOTE: Do NOT COPY the local `.env` into the image when deploying to
-# hosted services (Hugging Face Spaces). Provide secrets / environment
-# variables via the Spaces "Secrets" or repository settings instead.
-# If you need a local .env for development, mount it at runtime or
-# uncomment the following line for local builds only.
-# COPY .env .
-
-# Upgrade pip and install Python dependencies
+# 7. Cài đặt dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Expose port for FastAPI
-EXPOSE 8000
+# 8. Copy TOÀN BỘ file trong thư mục hiện tại vào container
+# (Bao gồm main.py, folder core, folder models...)
+COPY --chown=user . .
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+# 9. Chuyển quyền sang user thường
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
 
-# Hugging Face Spaces BẮT BUỘC dùng port 7860
-CMD ["uvicorn", "visual_search:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
+# 10. Mở port 7860
+EXPOSE 7860
+
+# 11. Chạy server
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
