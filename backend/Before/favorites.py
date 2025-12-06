@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException
-# SỬA DÒNG NÀY: Import hàm get_favorites_collection thay vì biến favorite_collection
 from core.db import get_favorites_collection, get_db_collection 
 from deps import get_current_user
 from schemas import PaginatedResponse
