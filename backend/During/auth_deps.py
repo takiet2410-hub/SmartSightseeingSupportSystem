@@ -1,28 +1,35 @@
+# auth_deps.py
+
 from fastapi import Depends, HTTPException
-from fastapi.security import APIKeyHeader
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from core.config import JWT_SECRET_KEY, JWT_ALGORITHM
+from typing import Optional
 
-# Header Authorization: Bearer <token>
-auth_header = APIKeyHeader(name="Authorization")
+# Sử dụng HTTPBearer thay vì APIKeyHeader
+# auto_error=False: Nếu không có header Authorization, nó trả về None thay vì lỗi 403
+security = HTTPBearer(auto_error=False)
 
-
-def get_current_user_id(token: str = Depends(auth_header)) -> str:
-    # Remove "Bearer "
-    if token.lower().startswith("bearer "):
-        token = token[7:]
+def get_current_user_id(token: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[str]:
+    # 1. Kiểm tra nếu không có token được gửi lên
+    if not token:
+        return None
 
     try:
-        # ⚠️ TẠM THỜI BỎ VERIFY CHỮ KÝ ĐỂ DEV TEST
-        # payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        payload = jwt.decode(token, options={"verify_signature": False})
+        # 2. Lấy chuỗi JWT thực tế
+        # HTTPBearer tự động tách "Bearer " ra, nên token.credentials chính là chuỗi JWT sạch
+        jwt_token = token.credentials 
+
+        # 3. Decode token (Tạm thời bỏ verify signature như logic cũ)
+        payload = jwt.decode(jwt_token, options={"verify_signature": False})
 
         user_id = payload.get("sub") or payload.get("user_id")
 
         if not user_id:
-            raise HTTPException(status_code=401, detail="user_id missing in token")
+            return None 
 
         return user_id
 
     except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        # Token không hợp lệ (hết hạn, sai định dạng...), trả về None
+        return None
