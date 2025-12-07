@@ -3,7 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import shared_resources # Import file chứa hàm load resources
 from visual_search import router as visual_search_router # Import Visual Search Router
-from detection_history import router as history_router     # Import History Router
+# history_router trong detection_history.py không được định nghĩa, ta dùng history_detail_router thay thế
+# from detection_history import router as history_router 
+from history_detail import router as history_detail_router
 
 # ------------------------------
 # INIT APP
@@ -30,8 +32,8 @@ app.add_middleware(
 # Gắn Router từ visual_search.py
 app.include_router(visual_search_router)
 
-# Gắn Router từ detection_history.py
-app.include_router(history_router)
+# Gắn Router từ history_detail.py (chứa cả summary và detail)
+app.include_router(history_detail_router)
 
 @app.get("/")
 def read_root():

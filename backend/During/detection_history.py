@@ -1,59 +1,81 @@
-# detection_history.py
-from fastapi import APIRouter, Depends, HTTPException
+# detection_history.py (New File/Logic)
 from datetime import datetime
-from typing import List, Dict, Any
-import shared_resources  # db, model, helpers
-from auth_deps import get_current_user_id
+import base64
+import shared_resources
+from core.config import HISTORY_COLLECTION
 
-router = APIRouter(tags=["User History"])
-HISTORY_COLLECTION_NAME = "Detection_History"
+# Đặt router ở đây nếu bạn muốn định nghĩa thêm các API liên quan đến lịch sử
+# Tuy nhiên, trong cấu trúc này, history_summary.py đã làm việc đó.
+# Ta chỉ cần định nghĩa hàm helper:
 
-def add_history_record(user_id: str, landmark_data: Dict[str, Any]):
-    if shared_resources.db is None:
-        print("⚠️ Database not connected. Cannot save history.")
-        return
-
-    collection = shared_resources.db[HISTORY_COLLECTION_NAME]
-
-    record = {
-        "landmark_id": landmark_data.get("landmark_id"),
-        "name": landmark_data.get("landmark_info", {}).get("name", "Unknown"),
-        "image_url": landmark_data.get("matched_image_url"),
-        "timestamp": datetime.utcnow(),
-        "similarity_score": landmark_data.get("similarity_score")
+def add_history_record(user_id: str, landmark_data: dict, uploaded_image_bytes: bytes, landmark_name: str):
+    """
+    Lưu bản ghi nhận diện vào lịch sử của người dùng.
+    Sử dụng cơ chế LIFO: mục mới nhất/được cập nhật sẽ lên đầu danh sách.
+    Kiểm tra duplicate: nếu landmark_id, score và ảnh base64 giống nhau,
+    chỉ cập nhật timestamp và đẩy lên đầu (không thêm bản ghi mới).
+    """
+    
+    # 1. Chuẩn bị dữ liệu cho bản ghi mới
+    
+    # Chuyển ảnh người dùng sang Base64
+    user_image_base64 = base64.b64encode(uploaded_image_bytes).decode('utf-8')
+    current_time_iso = datetime.utcnow().isoformat()
+    
+    new_record = {
+        "landmark_id": landmark_data["landmark_id"],
+        "name": landmark_name,
+        "user_image_base64": user_image_base64,
+        "timestamp": current_time_iso,
+        "similarity_score": landmark_data["similarity_score"],
     }
 
-    # 1. Lấy record mới nhất trong history
-    existing = collection.find_one(
+    # 2. Truy cập MongoDB
+    col = shared_resources.db[HISTORY_COLLECTION] # HISTORY_COLLECTION = "Detection_History"
+
+    # Tìm kiếm bản ghi lịch sử của user
+    user_doc = col.find_one({"user_id": user_id})
+
+    # 3. Xử lý Lịch sử (Create/Update/Push)
+    if not user_doc:
+        # Trường hợp 1: User chưa có lịch sử
+        col.insert_one({
+            "user_id": user_id,
+            "created_at": datetime.utcnow(),
+            "history": [new_record]
+        })
+        return
+
+    # Trường hợp 2: User đã có lịch sử. Tìm kiếm duplicate và xử lý LIFO.
+    history_list = user_doc.get("history", [])
+    
+    # Tiêu chí Duplicate: landmark_id + user_image_base64 + similarity_score
+    is_duplicate = False
+    
+    for i, item in enumerate(history_list):
+        if (item["landmark_id"] == new_record["landmark_id"] and
+            item["user_image_base64"] == new_record["user_image_base64"] and
+            abs(item["similarity_score"] - new_record["similarity_score"]) < 1e-6): # So sánh float an toàn hơn
+            
+            # Đánh dấu duplicate và cập nhật timestamp
+            is_duplicate = True
+            
+            # Loại bỏ bản ghi cũ khỏi vị trí hiện tại
+            duplicate_record = history_list.pop(i) 
+            
+            # Cập nhật timestamp mới
+            duplicate_record["timestamp"] = current_time_iso
+            
+            # Đẩy bản ghi đã cập nhật lên đầu danh sách (LIFO)
+            history_list.insert(0, duplicate_record)
+            break
+            
+    if not is_duplicate:
+        # Nếu không phải duplicate, thêm bản ghi mới vào đầu danh sách (LIFO)
+        history_list.insert(0, new_record)
+        
+    # Cập nhật lại toàn bộ danh sách lịch sử trong MongoDB
+    col.update_one(
         {"user_id": user_id},
-        {"history": {"$slice": 1}}
+        {"$set": {"history": history_list}}
     )
-
-    # 2. Nếu history tồn tại và giống hệt -> bỏ qua
-    if existing and existing.get("history"):
-        last = existing["history"][0]
-        if (
-            last["landmark_id"] == record["landmark_id"] and
-            last["image_url"] == record["image_url"] and
-            abs(last["similarity_score"] - record["similarity_score"]) < 1e-6
-        ):
-            print("⛔ Duplicate record detected. Skip saving.")
-            return
-
-    # 3. Nếu không trùng -> lưu
-    collection.update_one(
-        {"user_id": user_id},
-        {
-            "$push": {
-                "history": {
-                    "$each": [record],
-                    "$position": 0,
-                    "$slice": 50
-                }
-            },
-            "$setOnInsert": {"user_id": user_id, "created_at": datetime.utcnow()}
-        },
-        upsert=True
-    )
-
-    print(f"✅ Saved history for user {user_id}: Landmark {record['landmark_id']}")

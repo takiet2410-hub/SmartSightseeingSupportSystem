@@ -7,7 +7,7 @@ import torch
 # 1. Xác định vị trí
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir) 
-dotenv_path = os.path.join(parent_dir, '.env') #đưa thư mục .env vào đúng vị trí bên ngoài core dir.
+dotenv_path = os.path.join(parent_dir, 'core\.env') #đưa thư mục .env vào đúng vị trí bên ngoài core dir.
 
 # --- ĐOẠN DEBUG BẮT ĐẦU (Xóa sau khi fix xong) ---
 print(f"🔍 DEBUG: Đang tìm file .env tại: {dotenv_path}")
@@ -41,6 +41,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME")
 DURING_COLLECTION = os.getenv("DURING_COLLECTION")
 BEFORE_COLLECTION = os.getenv("BEFORE_COLLECTION")
+HISTORY_COLLECTION = os.getenv("HISTORY_COLLECTION")
 
 # ----------------------------------------------------
 # --- BỔ SUNG: BIẾN MÔI TRƯỜNG CHO MODEL DINOV2 ---
@@ -67,13 +68,13 @@ BATCH_SIZE = 100 # Kích thước lô mặc định
 # --- KIỂM TRA BẮT BUỘC ---
 required_vars = [
     MONGO_URI, DB_NAME, DURING_COLLECTION, BEFORE_COLLECTION,
-    MODEL_NAME, MODEL_PATH, DEVICE_PREF, JWT_SECRET_KEY, JWT_ALGORITHM # BỔ SUNG: Kiểm tra các biến model
+    MODEL_NAME, MODEL_PATH, DEVICE_PREF, JWT_SECRET_KEY, JWT_ALGORITHM, HISTORY_COLLECTION # BỔ SUNG: Kiểm tra các biến model
 ]
 
 if not all(required_vars):
     required_names = [
         "MONGO_URI", "DB_NAME", "DURING_COLLECTION", "BEFORE_COLLECTION",
-        "MODEL_NAME", "MODEL_PATH", "DEVICE_PREF", "JWT_SECRET_KEY", "JWT_ALGORITHM"
+        "MODEL_NAME", "MODEL_PATH", "DEVICE_PREF", "JWT_SECRET_KEY", "JWT_ALGORITHM", "HISTORY_COLLECTION"
     ]
     missing_vars = [name for name, val in zip(required_names, required_vars) if not val]
     raise EnvironmentError(
