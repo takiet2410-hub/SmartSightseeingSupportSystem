@@ -211,23 +211,38 @@ async def create_album(
         final_albums = []
         db_inserts = []
         
-        # Lặp lại với enumerate để lấy lại đúng tag
+        # Lặp qua từng album
         for index, album in enumerate(raw_albums):
             is_junk = album.method == "filters_rejected" or "Review Needed" in album.title
             
+            # Tạo ID mới cho mỗi album (Khắc phục lỗi duplicate key)
             album_id = str(uuid.uuid4())
+            
             output_photos = []
             db_photos_dict = []
-            has_cloud_photo = False
+            
+            # [DANH SÁCH MỚI] Gom đường dẫn file trên máy để nén Zip
+            local_files_for_zip = [] 
+            
+            cover_url = None
             
             for photo in album.photos:
                 orig = original_map.get(photo.filename)
                 if not orig: continue
                 
                 img_url = None
+                
+                # Logic lấy URL ảnh
                 if not is_junk and orig.local_path in uploaded_map:
                     img_url = uploaded_map[orig.local_path]
-                    has_cloud_photo = True
+                    
+                    # Lấy ảnh bìa
+                    if not cover_url: cover_url = img_url
+                    
+                    # [QUAN TRỌNG] Thêm đường dẫn file gốc vào danh sách nén
+                    if orig.local_path and os.path.exists(orig.local_path):
+                        local_files_for_zip.append(orig.local_path)
+                        
                 elif orig.local_path:
                     img_url = f"/images/{os.path.basename(orig.local_path)}"
                 
@@ -238,23 +253,18 @@ async def create_album(
                 )
                 output_photos.append(p_out)
                 
+                # Tạo dict cho DB
                 p_dict = p_out.dict()
-                if p_dict['timestamp']: p_dict['timestamp'] = p_dict['timestamp'].isoformat()
+                if p_dict.get('timestamp'): 
+                    p_dict['timestamp'] = p_dict['timestamp'].isoformat()
                 db_photos_dict.append(p_dict)
             
-            # [SỬA LỖI] Lấy tag từ map thay vì getattr
-            safe_tag = album_tags_map.get(index)
-            
+            # Tạo Link Zip (Gọi hàm mới: Nén Local -> Upload Raw)
             zip_url = None
-            cover_url = None
+            if not is_junk and local_files_for_zip:
+                zip_url = cloud_service.create_and_upload_zip(album.title, local_files_for_zip)
             
-            if not is_junk and has_cloud_photo and safe_tag:
-                zip_url = cloud_service.create_album_zip_link(safe_tag)
-                for p in output_photos:
-                    if p.image_url and "cloudinary" in p.image_url:
-                        cover_url = p.image_url
-                        break
-            
+            # Tạo Object Album
             album_out = Album(
                 id=album_id,
                 user_id=current_user_id,
@@ -267,16 +277,27 @@ async def create_album(
             )
             final_albums.append(album_out)
             
+            # Insert vào DB
             if not is_junk:
                 doc = album_out.dict()
                 doc['_id'] = album_id
                 db_inserts.append(doc)
         
+        # Lưu vào MongoDB
         if db_inserts:
             album_collection.insert_many(db_inserts)
-            logger.info(f"Saved {len(db_inserts)} albums to MongoDB")
+            logger.info(f"💾 Saved {len(db_inserts)} albums to MongoDB")
             
         return {"albums": final_albums}
+        
+        # Lưu DB
+        if db_inserts:
+            try:
+                album_collection.insert_many(db_inserts)
+                logger.info(f"💾 Saved {len(db_inserts)} albums to MongoDB")
+            except Exception as db_err:
+                logger.error(f"❌ DB Insert Error: {db_err}")
+                # Không raise lỗi ở đây để vẫn trả về kết quả cho user xem
 
     except Exception as e:
         logger.error(f"Logic Error: {e}")
