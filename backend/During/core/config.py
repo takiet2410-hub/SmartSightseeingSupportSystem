@@ -3,6 +3,7 @@
 import os
 from dotenv import load_dotenv
 import torch
+import cloudinary
 
 # 1. Xác định vị trí
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +43,20 @@ DB_NAME = os.getenv("DB_NAME")
 DURING_COLLECTION = os.getenv("DURING_COLLECTION")
 BEFORE_COLLECTION = os.getenv("BEFORE_COLLECTION")
 HISTORY_COLLECTION = os.getenv("HISTORY_COLLECTION")
+TEMP_HISTORY_COLLECTION = os.getenv("TEMP_HISTORY_COLLECTION")
+
+
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+
+# Cấu hình Cloudinary
+cloudinary.config( 
+  cloud_name = CLOUDINARY_CLOUD_NAME, 
+  api_key = CLOUDINARY_API_KEY, 
+  api_secret = CLOUDINARY_API_SECRET,
+  secure = True
+)
 
 # ----------------------------------------------------
 # --- BỔ SUNG: BIẾN MÔI TRƯỜNG CHO MODEL DINOV2 ---
@@ -68,13 +83,15 @@ BATCH_SIZE = 100 # Kích thước lô mặc định
 # --- KIỂM TRA BẮT BUỘC ---
 required_vars = [
     MONGO_URI, DB_NAME, DURING_COLLECTION, BEFORE_COLLECTION,
-    MODEL_NAME, MODEL_PATH, DEVICE_PREF, JWT_SECRET_KEY, JWT_ALGORITHM, HISTORY_COLLECTION # BỔ SUNG: Kiểm tra các biến model
+    MODEL_NAME, MODEL_PATH, DEVICE_PREF, JWT_SECRET_KEY, JWT_ALGORITHM, HISTORY_COLLECTION,
+    TEMP_HISTORY_COLLECTION, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET # BỔ SUNG: Kiểm tra các biến model
 ]
 
 if not all(required_vars):
     required_names = [
         "MONGO_URI", "DB_NAME", "DURING_COLLECTION", "BEFORE_COLLECTION",
-        "MODEL_NAME", "MODEL_PATH", "DEVICE_PREF", "JWT_SECRET_KEY", "JWT_ALGORITHM", "HISTORY_COLLECTION"
+        "MODEL_NAME", "MODEL_PATH", "DEVICE_PREF", "JWT_SECRET_KEY", "JWT_ALGORITHM", "HISTORY_COLLECTION",
+        "TEMP_HISTORY_COLLECTION", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"
     ]
     missing_vars = [name for name, val in zip(required_names, required_vars) if not val]
     raise EnvironmentError(

@@ -1,44 +1,65 @@
-# detection_history.py (New File/Logic)
+# detection_history.py
+from fastapi import APIRouter, Depends, HTTPException, Body
 from datetime import datetime
-import base64
 import shared_resources
-from core.config import HISTORY_COLLECTION
+import cloudinary.uploader # [NEW]
+import io
+from core.config import HISTORY_COLLECTION, TEMP_HISTORY_COLLECTION
+from auth_deps import get_current_user_id
+from typing import Optional
 
-# Đặt router ở đây nếu bạn muốn định nghĩa thêm các API liên quan đến lịch sử
-# Tuy nhiên, trong cấu trúc này, history_summary.py đã làm việc đó.
-# Ta chỉ cần định nghĩa hàm helper:
+router = APIRouter(tags=["History Management"])
 
-def add_history_record(user_id: str, landmark_data: dict, uploaded_image_bytes: bytes, landmark_name: str):
-    """
-    Lưu bản ghi nhận diện vào lịch sử của người dùng.
-    Sử dụng cơ chế LIFO: mục mới nhất/được cập nhật sẽ lên đầu danh sách.
-    Kiểm tra duplicate: nếu landmark_id, score và ảnh base64 giống nhau,
-    chỉ cập nhật timestamp và đẩy lên đầu (không thêm bản ghi mới).
-    """
+# Helper để upload ảnh (Dùng chung cho cả Main và Temp)
+def upload_image_to_cloud(image_bytes: bytes) -> str:
+    try:
+        # Upload file từ bytes
+        upload_result = cloudinary.uploader.upload(io.BytesIO(image_bytes))
+        return upload_result.get("secure_url") # Trả về URL ảnh
+    except Exception as e:
+        print(f"Error uploading image: {e}")
+        return None
+
+# =========================================================================
+# HELPER: ADD RECORD (CHÍNH THỨC)
+# =========================================================================
+def add_history_record(
+    user_id: str, 
+    landmark_data: dict, 
+    landmark_name: str,
+    uploaded_image_bytes: Optional[bytes] = None,
+    existing_url: Optional[str] = None, # [SỬA] Đổi từ base64 sang url
+    custom_timestamp: Optional[str] = None 
+):
     
-    # 1. Chuẩn bị dữ liệu cho bản ghi mới
+    # 1. Xử lý ảnh: Ưu tiên dùng URL có sẵn (khi migrate), nếu không thì upload mới
+    user_image_url = None
     
-    # Chuyển ảnh người dùng sang Base64
-    user_image_base64 = base64.b64encode(uploaded_image_bytes).decode('utf-8')
-    current_time_iso = datetime.utcnow().isoformat()
+    if existing_url:
+        user_image_url = existing_url
+    elif uploaded_image_bytes:
+        # [SỬA] Upload lên Cloud lấy URL thay vì Base64
+        user_image_url = upload_image_to_cloud(uploaded_image_bytes)
+    
+    if not user_image_url:
+        return # Không có ảnh thì không lưu (hoặc xử lý lỗi tùy bạn)
+
+    # 2. Xử lý thời gian
+    timestamp = custom_timestamp if custom_timestamp else datetime.utcnow().isoformat()
     
     new_record = {
         "landmark_id": landmark_data["landmark_id"],
         "name": landmark_name,
-        "user_image_base64": user_image_base64,
-        "timestamp": current_time_iso,
-        "similarity_score": landmark_data["similarity_score"],
+        "user_image_url": user_image_url, # [SỬA] Lưu URL
+        "timestamp": timestamp,
+        "similarity_score": landmark_data.get("similarity_score", 0),
     }
 
-    # 2. Truy cập MongoDB
-    col = shared_resources.db[HISTORY_COLLECTION] # HISTORY_COLLECTION = "Detection_History"
-
-    # Tìm kiếm bản ghi lịch sử của user
+    col = shared_resources.db[HISTORY_COLLECTION]
     user_doc = col.find_one({"user_id": user_id})
 
-    # 3. Xử lý Lịch sử (Create/Update/Push)
+    # Logic Create/Update + LIFO + Duplicate Check
     if not user_doc:
-        # Trường hợp 1: User chưa có lịch sử
         col.insert_one({
             "user_id": user_id,
             "created_at": datetime.utcnow(),
@@ -46,36 +67,90 @@ def add_history_record(user_id: str, landmark_data: dict, uploaded_image_bytes: 
         })
         return
 
-    # Trường hợp 2: User đã có lịch sử. Tìm kiếm duplicate và xử lý LIFO.
     history_list = user_doc.get("history", [])
-    
-    # Tiêu chí Duplicate: landmark_id + user_image_base64 + similarity_score
     is_duplicate = False
     
     for i, item in enumerate(history_list):
+        # Check duplicate dựa trên ID và URL
         if (item["landmark_id"] == new_record["landmark_id"] and
-            item["user_image_base64"] == new_record["user_image_base64"] and
-            abs(item["similarity_score"] - new_record["similarity_score"]) < 1e-6): # So sánh float an toàn hơn
+            item.get("user_image_url") == new_record["user_image_url"]): # [SỬA] Check URL
             
-            # Đánh dấu duplicate và cập nhật timestamp
             is_duplicate = True
-            
-            # Loại bỏ bản ghi cũ khỏi vị trí hiện tại
-            duplicate_record = history_list.pop(i) 
-            
-            # Cập nhật timestamp mới
-            duplicate_record["timestamp"] = current_time_iso
-            
-            # Đẩy bản ghi đã cập nhật lên đầu danh sách (LIFO)
+            duplicate_record = history_list.pop(i)
+            duplicate_record["timestamp"] = timestamp 
             history_list.insert(0, duplicate_record)
             break
             
     if not is_duplicate:
-        # Nếu không phải duplicate, thêm bản ghi mới vào đầu danh sách (LIFO)
         history_list.insert(0, new_record)
         
-    # Cập nhật lại toàn bộ danh sách lịch sử trong MongoDB
+    col.update_one({"user_id": user_id}, {"$set": {"history": history_list}})
+
+# =========================================================================
+# HELPER: ADD TEMP RECORD (TẠM THỜI)
+# =========================================================================
+def add_temp_record(temp_id: str, landmark_data: dict, uploaded_image_bytes: bytes, landmark_name: str):
+    
+    # [SỬA] Upload ngay cả khi là Temp (để khi sync không cần upload lại)
+    user_image_url = upload_image_to_cloud(uploaded_image_bytes)
+    current_time_iso = datetime.utcnow().isoformat()
+
+    new_record = {
+        "landmark_id": landmark_data["landmark_id"],
+        "name": landmark_name,
+        "user_image_url": user_image_url, # [SỬA] Lưu URL
+        "timestamp": current_time_iso,
+        "similarity_score": landmark_data.get("similarity_score", 0),
+    }
+
+    col = shared_resources.db[TEMP_HISTORY_COLLECTION]
+    
     col.update_one(
-        {"user_id": user_id},
-        {"$set": {"history": history_list}}
+        {"temp_id": temp_id},
+        {
+            "$push": {
+                "history": {
+                    "$each": [new_record],
+                    "$position": 0 
+                }
+            },
+            "$setOnInsert": {"created_at": datetime.utcnow()} 
+        },
+        upsert=True
     )
+
+# =========================================================================
+# API: SYNC / MIGRATE
+# =========================================================================
+@router.post("/history/sync")
+def sync_temp_history(
+    temp_id: str = Body(..., embed=True), 
+    user_id: str = Depends(get_current_user_id)
+):
+    if not user_id:
+        raise HTTPException(401, "User must be logged in to sync history.")
+    
+    temp_col = shared_resources.db[TEMP_HISTORY_COLLECTION]
+    temp_doc = temp_col.find_one({"temp_id": temp_id})
+
+    if not temp_doc or "history" not in temp_doc:
+        return {"status": "no_data", "message": "No temporary history to sync."}
+
+    temp_history = temp_doc["history"]
+
+    for item in reversed(temp_history):
+        add_history_record(
+            user_id=user_id,
+            landmark_data={
+                "landmark_id": item["landmark_id"], 
+                "similarity_score": item["similarity_score"]
+            },
+            landmark_name=item["name"],
+            uploaded_image_bytes=None,
+            existing_url=item.get("user_image_url"), # [SỬA] Truyền URL cũ sang
+            custom_timestamp=item["timestamp"]          
+        )
+
+    temp_col.delete_one({"temp_id": temp_id})
+
+    return {"status": "synced", "count": len(temp_history)}

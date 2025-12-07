@@ -22,3 +22,5 @@ uvicorn
 scikit-learn
 
 pyjwt
+
+cloudinary

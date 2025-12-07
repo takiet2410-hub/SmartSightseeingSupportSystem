@@ -12,25 +12,20 @@ router = APIRouter(tags=["History Read"])
 # ======================================================
 @router.get("/history/summary")
 def history_summary(user_id: str = Depends(get_current_user_id)):
-
-    if not user_id:
-        # Nếu user_id là None, không thể truy cập lịch sử
-        raise HTTPException(401, "Authentication required to view history.")
-
-    col = shared_resources.db[HISTORY_COLLECTION] # Sử dụng biến config
+    # ... (Giữ nguyên phần check user)
+    col = shared_resources.db[HISTORY_COLLECTION] 
     doc = col.find_one({"user_id": user_id})
 
     if not doc or "history" not in doc:
-        return []  # Không có lịch sử → trả list rỗng
+        return [] 
 
-    # Theo logic LIFO đã được cài đặt, list này đã được sắp xếp
     summary_list = []
 
     for item in doc["history"]:
         summary_list.append({
             "landmark_id": item.get("landmark_id"),
-            "name": item.get("name"), # Lấy tên từ lịch sử đã lưu
-            "user_image_base64": item.get("user_image_base64"),
+            "name": item.get("name"), 
+            "user_image_url": item.get("user_image_url"), # [SỬA] Trả về URL
             "timestamp": item.get("timestamp"),
             "similarity_score": item.get("similarity_score"),
         })
@@ -78,7 +73,7 @@ def history_detail(
 
     if not info:
         # Rất hiếm khi xảy ra, trừ khi dữ liệu gốc bị xóa
-        raise HTTPException(404, "Landmark metadata not found.")
+        raise HTTPException(404, "Landmark metadata not found.")    
 
     # Main image from BEFORE_COLLECTION
     image_urls = info.get("image_urls", [])
@@ -87,5 +82,12 @@ def history_detail(
 
     # Response format
     return {
-        "landmark_info": info
+        "status": "success",
+        "landmark_id": landmark_id,
+        "name": info.get("name"), 
+        "user_image_url": target.get("user_image_url"), # [SỬA] Trả về URL
+        "timestamp": target.get("timestamp"),
+        "similarity_score": target.get("similarity_score"),
+        "matched_image_url": matched_image_url,
+        "landmark_info": info, 
     }
