@@ -112,6 +112,9 @@ def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> L
 def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) -> List[Album]:
     logger.info(f"Running HDBSCAN (Min Cluster Size={min_cluster_size}) on {len(photos)} photos")
 
+    max_dist_meters = 300
+    epsilon_rad = (max_dist_meters / 1000.0) / EARTH_RADIUS_KM
+    
     coords = np.radians([[p.latitude, p.longitude] for p in photos])
     
     # 🚀 v3-lite: Optimized HDBSCAN parameters
@@ -119,6 +122,7 @@ def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) ->
         min_cluster_size=min_cluster_size, 
         min_samples=1, 
         metric='haversine',
+        cluster_selection_epsilon=epsilon_rad,
         core_dist_n_jobs=-1,
         algorithm='best',              # 🚀 Auto-select fastest algorithm
         approx_min_span_tree=True      # 🚀 Use approximation (1.3-1.5x faster)
