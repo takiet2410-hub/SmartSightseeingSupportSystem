@@ -1,105 +1,122 @@
 from geopy.distance import geodesic
 from typing import List, Dict, Any, Tuple
-from config import GOONG_API_KEY # Đảm bảo bạn đã thay key Goong trong config.py
+from datetime import datetime
+from config import GOONG_API_KEY 
 
 class SummaryService:
     def __init__(self):
         self.api_key = GOONG_API_KEY
 
-    def generate_summary(self, album_data: dict, manual_locations: List[dict]):
+    def generate_summary(self, album_data: Dict[str, Any], manual_locations: List[dict]):
         """
-        Xử lý Trip Summary dựa trên cấu trúc JSON thực tế:
-        Albums -> Photos (có GPS).
-        Thuật toán: Tính trung bình cộng tọa độ của photos để tìm tâm của Album.
+        Input: Cấu trúc JSON final chứa list albums -> photos (có lat/lon).
+        Output: Thông tin tóm tắt chuyến đi + URL bản đồ Goong.
         """
         
-        # 1. Lấy danh sách albums
-        albums = album_data.get("albums", [])
+        # 1. Xử lý đầu vào linh hoạt (nhận cả dict hoặc list)
+        if isinstance(album_data, dict):
+            albums = album_data.get("albums", [])
+        elif isinstance(album_data, list):
+            albums = album_data
+        else:
+            return self._empty_result()
+
         if not albums:
             return self._empty_result()
 
         # 2. Map dữ liệu sửa tay (Key = album_title)
         manual_map = {m['album_title']: m for m in manual_locations}
 
-        valid_points = []   # Các điểm chốt để vẽ bản đồ
+        valid_points = []   # List các tọa độ đại diện (lat, lon)
         timeline_names = [] # Tên các điểm đến
         total_photos = 0
+        all_timestamps = [] # Dùng để tìm ngày bắt đầu/kết thúc
         
-        # Biến ngày tháng
-        start_date = ""
-        end_date = ""
-
         # 3. DUYỆT QUA TỪNG ALBUM
         for album in albums:
             title = album.get("title", "Unknown Event")
             method = album.get("method", "")
+            photos = album.get("photos", [])
 
             # Bỏ qua album rác
             if method == "filters_rejected" or "Review Needed" in title:
                 continue
 
-            photos = album.get("photos", [])
             count = len(photos)
             total_photos += count
-
             if count == 0:
                 continue
 
-            # --- A. TÍNH TOÁN TỌA ĐỘ TRUNG TÂM (CENTROID) ---
+            # --- TÍNH TOÁN TỌA ĐỘ TRUNG TÂM (CENTROID) ---
             lat_sum = 0.0
             lon_sum = 0.0
             valid_photo_count = 0
             
-            # Lấy ngày tháng từ ảnh đầu/cuối của chuyến đi
-            if photos:
-                current_ts = photos[0].get("timestamp")
-                if current_ts and not start_date:
-                     start_date = str(current_ts).split("T")[0]
-                
-                last_ts = photos[-1].get("timestamp")
-                if last_ts:
-                    end_date = str(last_ts).split("T")[0]
-
-            # Duyệt từng ảnh để cộng dồn tọa độ
             for p in photos:
+                # Lấy timestamp để tính thời gian chuyến đi
+                ts = p.get("timestamp")
+                if ts:
+                    # Chuyển đổi timestamp sang string chuẩn ISO nếu cần
+                    if isinstance(ts, datetime):
+                        ts_str = ts.isoformat()
+                    else:
+                        ts_str = str(ts)
+                    all_timestamps.append(ts_str)
+
+                # Lấy GPS
                 p_lat = p.get("lat")
                 p_lon = p.get("lon")
                 
                 # Kiểm tra tọa độ hợp lệ
                 if p_lat is not None and p_lon is not None:
-                    if float(p_lat) != 0.0 and float(p_lon) != 0.0:
-                        lat_sum += float(p_lat)
-                        lon_sum += float(p_lon)
-                        valid_photo_count += 1
+                    try:
+                        f_lat = float(p_lat)
+                        f_lon = float(p_lon)
+                        if f_lat != 0.0 and f_lon != 0.0:
+                            lat_sum += f_lat
+                            lon_sum += f_lon
+                            valid_photo_count += 1
+                    except ValueError:
+                        continue
             
+            # Tính trung bình cộng để ra điểm đại diện cho Album
             final_lat = None
             final_lon = None
 
-            # Nếu có ảnh có GPS -> Tính trung bình
             if valid_photo_count > 0:
                 final_lat = lat_sum / valid_photo_count
                 final_lon = lon_sum / valid_photo_count
 
-            # --- B. KIỂM TRA DỮ LIỆU NHẬP TAY (OVERRIDE) ---
-            # Nếu user đã sửa địa điểm này, ưu tiên dùng của user
+            # --- KIỂM TRA DỮ LIỆU NHẬP TAY (MANUAL OVERRIDE) ---
             if title in manual_map:
                 user_input = manual_map[title]
-                final_lat = user_input.get('lat')
-                final_lon = user_input.get('lon')
+                if user_input.get('lat') and user_input.get('lon'):
+                    final_lat = float(user_input.get('lat'))
+                    final_lon = float(user_input.get('lon'))
                 if user_input.get('name'):
                     title = user_input.get('name')
 
-            # --- C. LƯU ĐIỂM ĐẠI DIỆN HỢP LỆ ---
+            # --- LƯU ĐIỂM HỢP LỆ ---
             if final_lat is not None and final_lon is not None:
                 valid_points.append((final_lat, final_lon))
                 timeline_names.append(title)
 
-        # 4. Tính tổng quãng đường
+        # 4. Tính toán thống kê
         total_distance = 0.0
         if len(valid_points) > 1:
             for i in range(len(valid_points) - 1):
-                dist = geodesic(valid_points[i], valid_points[i+1]).km
-                total_distance += dist
+                try:
+                    dist = geodesic(valid_points[i], valid_points[i+1]).km
+                    total_distance += dist
+                except: pass
+
+        # Sắp xếp thời gian để lấy Start/End Date chuẩn xác
+        start_date = ""
+        end_date = ""
+        if all_timestamps:
+            all_timestamps.sort()
+            start_date = all_timestamps[0].split("T")[0]
+            end_date = all_timestamps[-1].split("T")[0]
 
         # 5. Tạo Link Bản đồ Goong
         map_url = self._build_goong_static_map_url(valid_points)
@@ -116,14 +133,12 @@ class SummaryService:
         }
 
     def _build_goong_static_map_url(self, points: List[Tuple[float, float]]):
-        """
-        Tạo URL bản đồ tĩnh Goong.io
-        """
+        """Tạo URL bản đồ tĩnh Goong.io"""
         if not points: return ""
         
         base_url = "https://rsapi.goong.io/staticmap/v1?"
         
-        # Nếu quá nhiều điểm, lấy mẫu để URL không bị quá dài
+        # Giới hạn số điểm vẽ để URL không quá dài
         display_points = points
         if len(points) > 15:
             step = len(points) // 15 + 1
@@ -132,7 +147,6 @@ class SummaryService:
                 display_points.append(points[-1])
 
         # Tạo đường nối (Path) - Màu xanh dương
-        # Goong format: path=color:Hex|weight:Number|lat,lon|lat,lon...
         path_str = "path=color:007bff|weight:5"
         for lat, lon in display_points:
             path_str += f"|{lat},{lon}"
@@ -140,10 +154,11 @@ class SummaryService:
         # Tạo Markers - Điểm đầu Xanh, Điểm cuối Đỏ, Giữa Xanh dương
         markers_list = []
         for i, (lat, lon) in enumerate(display_points):
-            label = str(i + 1) if i < 9 else "Z"
             color = "blue"
-            if i == 0: color = "green"
-            elif i == len(display_points) - 1: color = "red"
+            label = str(i + 1) if i < 9 else "Z"
+            
+            if i == 0: color = "green" # Điểm bắt đầu
+            elif i == len(display_points) - 1: color = "red" # Điểm kết thúc
             
             markers_list.append(f"markers=color:{color}|label:{label}|{lat},{lon}")
             
