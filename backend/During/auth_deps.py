@@ -1,36 +1,35 @@
-# auth_deps.py (Đã sửa theo gợi ý trước)
+# auth_deps.py
 
 from fastapi import Depends, HTTPException
-from fastapi.security import APIKeyHeader
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from core.config import JWT_SECRET_KEY, JWT_ALGORITHM
-from typing import Optional # Quan trọng để hỗ trợ Optional[str]
+from typing import Optional
 
-# Sử dụng auto_error=False để FastAPI không tự động ném lỗi 403 nếu header thiếu
-auth_header = APIKeyHeader(name="Authorization", auto_error=False) 
+# Sử dụng HTTPBearer thay vì APIKeyHeader
+# auto_error=False: Nếu không có header Authorization, nó trả về None thay vì lỗi 403
+security = HTTPBearer(auto_error=False)
 
-# HÀM NÀY CHO PHÉP TRẢ VỀ user_id HOẶC None
-def get_current_user_id(token: Optional[str] = Depends(auth_header)) -> Optional[str]:
-    # Nếu không có token nào được gửi, trả về None (cho phép truy cập)
+def get_current_user_id(token: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[str]:
+    # 1. Kiểm tra nếu không có token được gửi lên
     if not token:
         return None
 
-    # Remove "Bearer "
-    if token.lower().startswith("bearer "):
-        token = token[7:]
-
     try:
-        # Tạm thời bỏ verify signature (như code gốc của bạn)
-        payload = jwt.decode(token, options={"verify_signature": False})
+        # 2. Lấy chuỗi JWT thực tế
+        # HTTPBearer tự động tách "Bearer " ra, nên token.credentials chính là chuỗi JWT sạch
+        jwt_token = token.credentials 
+
+        # 3. Decode token (Tạm thời bỏ verify signature như logic cũ)
+        payload = jwt.decode(jwt_token, options={"verify_signature": False})
 
         user_id = payload.get("sub") or payload.get("user_id")
 
         if not user_id:
-            # Token hợp lệ nhưng thiếu user_id, trả về None
             return None 
 
         return user_id
 
     except Exception:
-        # Token không hợp lệ (hết hạn, sai định dạng), trả về None
+        # Token không hợp lệ (hết hạn, sai định dạng...), trả về None
         return None

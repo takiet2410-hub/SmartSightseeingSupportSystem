@@ -3,7 +3,7 @@ from pymongo import MongoClient
 from transformers import Dinov2Model, AutoImageProcessor
 import torch.nn as nn
 import torch
-from core.config import MONGO_URI, DB_NAME, DURING_COLLECTION, MODEL_NAME, MODEL_PATH, DEVICE
+from core.config import MONGO_URI, DB_NAME, DURING_COLLECTION, MODEL_NAME, MODEL_PATH, DEVICE, TEMP_HISTORY_COLLECTION
 import os
 from PIL import Image
 from typing import Dict, Any, List
@@ -37,6 +37,14 @@ def load_resources():
         client = None
         print(f"❌ Lỗi kết nối MongoDB: {type(e).__name__}: {e}")
         # không raise để app vẫn khởi động (endpoints kiểm tra db is None)
+
+    try:
+        temp_col = db[TEMP_HISTORY_COLLECTION]
+        # Tạo index cho trường "created_at", hết hạn sau 24h
+        temp_col.create_index("created_at", expireAfterSeconds=86400) 
+        print("✅ TTL Index for Temp History ensured (24h).")
+    except Exception as e:
+        print(f"⚠️ Could not create TTL index: {e}")
 
     # Model load
     try:
