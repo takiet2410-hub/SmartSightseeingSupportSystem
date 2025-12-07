@@ -1,11 +1,18 @@
+import os
+from dotenv import load_dotenv
 from geopy.distance import geodesic
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
-from config import GOONG_API_KEY 
+import math
+
+# Load biến môi trường từ file .env
+load_dotenv()
 
 class SummaryService:
     def __init__(self):
-        self.api_key = GOONG_API_KEY
+        self.mapbox_key = os.getenv("MAPBOX_TOKEN")
+        if not self.mapbox_key:
+            print("⚠️ CẢNH BÁO: Chưa cấu hình MAPBOX_TOKEN trong file .env")
 
     def generate_summary(self, album_data: Dict[str, Any], manual_locations: List[dict]):
         """
@@ -133,36 +140,78 @@ class SummaryService:
         }
 
     def _build_goong_static_map_url(self, points: List[Tuple[float, float]]):
-        """Tạo URL bản đồ tĩnh Goong.io"""
-        if not points: return ""
-        
-        base_url = "https://rsapi.goong.io/staticmap/v1?"
-        
-        # Giới hạn số điểm vẽ để URL không quá dài
-        display_points = points
-        if len(points) > 15:
-            step = len(points) // 15 + 1
-            display_points = points[::step]
-            if points[-1] not in display_points:
-                display_points.append(points[-1])
+        """
+        Vẽ marker + path bằng Mapbox Static Images API
+        và tự tính zoom đủ để thấy toàn bộ hành trình (auto-fit).
+        """
+        if not points or not self.mapbox_key:
+            return ""
 
-        # Tạo đường nối (Path) - Màu xanh dương
-        path_str = "path=color:007bff|weight:5"
-        for lat, lon in display_points:
-            path_str += f"|{lat},{lon}"
-            
-        # Tạo Markers - Điểm đầu Xanh, Điểm cuối Đỏ, Giữa Xanh dương
-        markers_list = []
-        for i, (lat, lon) in enumerate(display_points):
-            color = "blue"
-            label = str(i + 1) if i < 9 else "Z"
-            
-            if i == 0: color = "green" # Điểm bắt đầu
-            elif i == len(display_points) - 1: color = "red" # Điểm kết thúc
-            
-            markers_list.append(f"markers=color:{color}|label:{label}|{lat},{lon}")
-            
-        return f"{base_url}size=600x400&maptype=roadmap&{path_str}&{'&'.join(markers_list)}&api_key={self.api_key}"
+
+        # --- Tính bounding box ---
+        lats = [p[0] for p in points]
+        lons = [p[1] for p in points]
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
+
+
+        # --- Tính center ---
+        center_lat = (min_lat + max_lat) / 2
+        center_lon = (min_lon + max_lon) / 2
+
+
+        # --- Auto-fit zoom cho Mapbox ---
+        width_px = 600
+        height_px = 400
+
+
+        # biên độ góc theo độ
+        lon_diff = max_lon - min_lon
+        lat_diff = max_lat - min_lat
+
+
+        # tránh chia 0
+        lon_diff = max(lon_diff, 0.00001)
+        lat_diff = max(lat_diff, 0.00001)
+
+
+        # Tính zoom theo công thức Mapbox
+        # zoom = log2(360 * width_px / lon_span_deg)
+
+        zoom_x = math.log2(360 * (width_px / 256) / lon_diff)
+        zoom_y = math.log2(170.1022 * (height_px / 256) / lat_diff) # hằng số cho lat
+
+
+        zoom = min(zoom_x, zoom_y)
+        zoom = max(min(zoom, 16), 3) # giới hạn zoom hợp lệ
+
+
+        # --- Path (lng,lat) ---
+        path_coords = [f"{lon},{lat}" for lat, lon in points]
+        polyline = "|".join(path_coords)
+
+
+        # --- Markers ---
+        start = points[0]
+        end = points[-1]
+
+
+        overlay = (
+            f"pin-s+00ff00({start[1]},{start[0]})," # start
+            f"pin-s+ff0000({end[1]},{end[0]})," # end
+            f"path-3+0000ff-0.8({polyline})"
+        )
+
+
+        url = (
+            "https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/"
+            f"{overlay}/"
+            f"{center_lon},{center_lat},{zoom},0,0/"
+            f"{width_px}x{height_px}?access_token={self.mapbox_key}"
+        )
+
+
+        return url
 
     def _empty_result(self):
         return {
