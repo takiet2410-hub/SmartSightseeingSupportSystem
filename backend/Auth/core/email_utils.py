@@ -52,3 +52,37 @@ async def send_reset_email(email: EmailStr, token: str):
     return True
 
 
+# --- THÊM HÀM MỚI NÀY VÀO DƯỚI ---
+async def send_verification_email(email: EmailStr, token: str):
+    # Link này trỏ thẳng vào API xác thực của Backend
+    # Hoặc trỏ về Frontend (Frontend sẽ gọi API xác thực)
+    # Ở đây tôi demo trỏ về API Backend để kích hoạt luôn
+    verification_link = f"http://localhost:8000/auth/verify-email?token={token}"
+    
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #27ae60;">Kích hoạt tài khoản</h2>
+        <p>Xin chào,</p>
+        <p>Cảm ơn bạn đã đăng ký tài khoản tại Smart Tourism.</p>
+        <p>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản của bạn:</p>
+        
+        <a href="{verification_link}" style="background-color: #27ae60; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
+            Xác thực Email
+        </a>
+        
+        <p style="color: #7f8c8d; font-size: 0.9em;">Link này có hiệu lực trong 24 giờ.</p>
+        <hr style="border: 0; border-top: 1px solid #eee;" />
+        <p style="font-size: 0.8em; color: #999;">Smart Tourism Support Team</p>
+    </div>
+    """
+
+    message = MessageSchema(
+        subject="[Smart Tourism] Xác thực tài khoản của bạn",
+        recipients=[email],
+        body=html,
+        subtype=MessageType.html
+    )
+
+    fm = FastMail(conf)
+    await fm.send_message(message)
+    return True
