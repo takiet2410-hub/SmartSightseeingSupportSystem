@@ -1,8 +1,11 @@
 fastapi
 uvicorn
+requests
 pymongo
+dnspython
 python-dotenv
 pydantic
+email-validator
 passlib[bcrypt]
 bcrypt==4.0.1
 python-jose[cryptography]
