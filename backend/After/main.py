@@ -17,7 +17,7 @@ from datetime import datetime
 
 from PIL import Image
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import requests
@@ -35,13 +35,15 @@ from logger_config import logger
 from curation_service import CurationService
 from cloudinary_service import CloudinaryService
 from deps import get_current_user_id
-from db import album_collection
+from db import album_collection, summary_collection
+from connection_manager import ConnectionManager
 
 # 🚀 V2: Simple in-memory cache for duplicate detection
 _processed_cache = {}
 
 # Init Cloudinary
 cloud_service = CloudinaryService()
+manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -302,22 +304,6 @@ async def cleanup_images():
     _processed_cache.clear()
     return {"status": "cleaned"}
 
-@app.post("/summary/create", response_model=TripSummaryResponse)
-async def create_trip_summary(request: TripSummaryRequest):
-    try:
-        summary_service = SummaryService()
-        manual_locs_dict = [m.dict() for m in request.manual_locations]
-        
-        # request.album_data giờ là Dict theo schema, truyền thẳng vào service
-        result = summary_service.generate_summary(
-            album_data=request.album_data,
-            manual_locations=manual_locs_dict
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Summary error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/swagger-login")
 async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     """
@@ -350,6 +336,89 @@ async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     except requests.exceptions.ConnectionError:
         raise HTTPException(status_code=503, detail="Không kết nối được tới Auth Service (Port 8001)")
     
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive, listen for messages (optional)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+
+# 🚀 3. UPDATE THE CREATE ENDPOINT (Save DB + Push to WebSocket)
+@app.post("/summary/create", response_model=TripSummaryResponse)
+async def create_trip_summary(
+    request: TripSummaryRequest,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Generate trip summary from album data
+    Supports both real user tokens and test scripts
+    """
+    try:
+        summary_service = SummaryService()
+        
+        # ✅ Handle manual_locations (can be dicts or Pydantic models)
+        manual_locs = []
+        if request.manual_locations:
+            for loc in request.manual_locations:
+                if isinstance(loc, dict):
+                    manual_locs.append(loc)
+                elif hasattr(loc, 'dict'):
+                    manual_locs.append(loc.dict())
+                else:
+                    logger.warning(f"Unknown manual_location type: {type(loc)}")
+        
+        # A. Generate summary
+        result = summary_service.generate_summary(
+            album_data=request.album_data,
+            manual_locations=manual_locs
+        )
+        
+        # B. Save to MongoDB
+        summary_doc = dict(result) if isinstance(result, dict) else result
+        summary_doc["created_at"] = datetime.utcnow()
+        summary_doc["user_id"] = current_user_id
+        
+        try:
+            summary_collection.insert_one(summary_doc)
+            logger.info(f"✅ Saved trip summary to MongoDB")
+        except Exception as e:
+            logger.error(f"MongoDB save failed: {e}")
+        
+        # C. Push to WebSocket
+        try:
+            await manager.send_personal_message(result, current_user_id)
+            logger.info(f"✅ Pushed to WebSocket for user: {current_user_id}")
+        except Exception as e:
+            logger.error(f"WebSocket push failed: {e}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Summary error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/summary/history")
+async def get_summary_history(user_id: str = "test_runner"):
+    """
+    Get a list of all past trip summaries for this user.
+    """
+    try:
+        # Fetch all records, sorted by newest first
+        cursor = summary_collection.find(
+            {"user_id": user_id},
+            {"_id": 0} # Exclude MongoDB ID to avoid serialization issues
+        ).sort("created_at", -1)
+        
+        history = list(cursor)
+        return history
+    except Exception as e:
+        logger.error(f"Error fetching history: {e}")
+        return []
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

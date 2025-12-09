@@ -20,3 +20,5 @@ test_local.py
 .dockerignore
 temp/
 processed/
+
+node_modules/

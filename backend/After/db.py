@@ -6,14 +6,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
-
-# [QUAN TRỌNG] Sửa dòng này
-# Ưu tiên lấy từ .env, nếu không có thì mặc định vào "SmartTourismDB"
 DB_NAME = os.getenv("DB_NAME", "SmartTourismDB") 
 
-# Kết nối
 client = MongoClient(MONGO_URI)
-db = client[DB_NAME] # Lúc này nó sẽ trỏ đúng vào SmartTourismDB
+db = client[DB_NAME]
 
-# Collection Albums
+# Collections
 album_collection = db["Albums"]
+summary_collection = db["TripSummaries"]
