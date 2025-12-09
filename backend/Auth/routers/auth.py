@@ -17,6 +17,8 @@ from datetime import datetime, timedelta
 from schemas import ForgotPasswordRequest, ResetPasswordRequest
 from core.email_utils import send_reset_email, send_verification_email
 
+from fastapi.responses import RedirectResponse
+
 router = APIRouter()
 
 # --- 1. API ĐĂNG KÝ TÀI KHOẢN THƯỜNG ---
@@ -66,24 +68,24 @@ async def register(user: UserRegister):
 # --- 1.1 THÊM API XÁC THỰC EMAIL (Endpoint Mới) ---
 @router.get("/verify-email")
 async def verify_email_endpoint(token: str):
-    # Tìm user có token tương ứng
+    # 1. Server nhận token từ link người dùng bấm
     user = user_collection.find_one({"verification_token": token})
     
+    # 2. Nếu token sai hoặc link cũ -> Báo lỗi
     if not user:
-        raise HTTPException(status_code=400, detail="Token kích hoạt không hợp lệ hoặc đã được sử dụng.")
+        raise HTTPException(status_code=400, detail="Token không hợp lệ hoặc đã hết hạn.")
     
-    # Kích hoạt tài khoản và xóa token
+    # 3. QUAN TRỌNG: Cập nhật Database (Kích hoạt tài khoản)
     user_collection.update_one(
         {"_id": user["_id"]},
         {
-            "$set": {"is_active": True},
-            "$unset": {"verification_token": ""} # Xóa token để không dùng lại được
+            "$set": {"is_active": True},      # Bật active lên True
+            "$unset": {"verification_token": ""} # Xóa token đi
         }
     )
     
-    # Trả về thông báo hoặc Redirect về trang Login của Frontend
-    # return RedirectResponse("http://localhost:3000/login?verified=true")
-    return {"message": "Tài khoản đã được kích hoạt thành công! Bạn có thể đăng nhập ngay bây giờ."}
+    # 4. Xong việc -> Đưa người dùng về trang Đăng nhập
+    return RedirectResponse(url="/docs")
 
 # --- 2. API ĐĂNG NHẬP THƯỜNG (Login Local) ---
 @router.post("/login", response_model=Token)
