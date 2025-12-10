@@ -48,6 +48,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/", tags=["Health"])
+def root():
+    """Health check endpoint"""
+    return {"status": "ok", "service": "Before Module", "version": "1.0.0"}
+
 @app.post("/login-proxy", tags=["Auth Proxy"])
 def login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     """

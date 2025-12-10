@@ -8,7 +8,8 @@ import json
 # --- Helper: Build Filter Query ---
 def build_filter_query(constraints: HardConstraints) -> Dict[str, Any]:
     query = {}
-    if constraints.budget_range: query["budget_range"] = constraints.budget_range
+    if constraints.budget_range: 
+        query["budget_range"] = {"$in": constraints.budget_range}
     
     if constraints.available_time: 
         query["available_time"] = {"$in": constraints.available_time}
@@ -25,7 +26,7 @@ def build_filter_query(constraints: HardConstraints) -> Dict[str, Any]:
 def build_vector_search_filter(constraints: HardConstraints) -> Dict[str, Any]:
     filter_conditions = {}
     if constraints.budget_range: 
-        filter_conditions["budget_range"] = {"$eq": constraints.budget_range}
+        filter_conditions["budget_range"] = {"$in": constraints.budget_range}
         
     if constraints.location_province: 
         filter_conditions["location_province"] = {"$eq": constraints.location_province}

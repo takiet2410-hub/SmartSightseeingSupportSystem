@@ -18,7 +18,7 @@ class WeatherInfo(BaseModel):
 
 class HardConstraints(BaseModel):
     # Dùng cho cả filter danh sách và AI
-    budget_range: Optional[str] = Field(default=None, description="Ngân sách")
+    budget_range: Optional[List[str]] = Field(default=None, description="Ngân sách (multi-select)")
     available_time: Optional[List[str]] = Field(default=None, description="Thời gian rảnh")
     companion_tag: Optional[List[str]] = Field(default=None, description="Bạn đồng hành")
     season_tag: Optional[List[str]] = Field(default=None, description="Mùa")
