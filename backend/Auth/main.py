@@ -79,9 +79,7 @@ async def serve_reset_password_page(token: str):
                 msg.innerText = "";
 
                 try {{
-                    // --- SỬA QUAN TRỌNG TẠI ĐÂY ---
-                    // Dùng đường dẫn tương đối (Relative Path)
-                    // Nó sẽ tự động hiểu là https://domain-hien-tai/auth/reset-password
+                    // Dùng đường dẫn tương đối (Relative Path) cho môi trường production/hosting
                     const response = await fetch('/auth/reset-password', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
@@ -98,6 +96,7 @@ async def serve_reset_password_page(token: str):
                         msg.style.color = 'green';
                         msg.innerText = "✅ Thành công! Bạn có thể đăng nhập ngay.";
                         btn.innerText = "Đã đổi xong";
+                        // Xóa input sau khi thành công
                         document.getElementById('new_pass').value = "";
                         document.getElementById('confirm_pass').value = "";
                     }} else {{

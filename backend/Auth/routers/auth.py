@@ -15,9 +15,8 @@ from google.auth.transport import requests as google_requests
 import uuid
 from datetime import datetime, timedelta
 from schemas import ForgotPasswordRequest, ResetPasswordRequest
-from core.email_utils import send_reset_email, send_verification_email
-
-from fastapi.responses import RedirectResponse
+from core.email_utils import send_reset_email, send_verification_email # KEEP BOTH EMAIL UTILS
+from fastapi.responses import RedirectResponse # KEEP RedirectResponse
 
 router = APIRouter()
 
@@ -85,6 +84,7 @@ async def verify_email_endpoint(token: str):
     )
     
     # 4. Xong việc -> Đưa người dùng về trang Đăng nhập
+    # Note: /docs is just for testing. In production, this should redirect to your frontend login page.
     return RedirectResponse(url="/docs")
 
 # --- 2. API ĐĂNG NHẬP THƯỜNG (Login Local) ---
@@ -104,7 +104,7 @@ async def login(user: UserAuth):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # --- THÊM ĐOẠN CHECK NÀY ---
+    # --- CHECK TÀI KHOẢN ĐÃ KÍCH HOẠT CHƯA ---
     # Nếu trường is_active là False thì chặn lại
     # Dùng .get("is_active", True) để tương thích ngược với các user cũ (coi như đã active)
     if not db_user.get("is_active", True): 
@@ -192,7 +192,6 @@ async def login_google(body: GoogleAuth):
         raise HTTPException(500, "Lỗi xác thực Google")
     
 
-
 # --- 4. API QUÊN MẬT KHẨU (Gửi Email) ---
 @router.post("/forgot-password")
 async def forgot_password(body: ForgotPasswordRequest):
@@ -208,7 +207,6 @@ async def forgot_password(body: ForgotPasswordRequest):
 
     # 3. KIỂM TRA KHỚP EMAIL (Logic bạn muốn)
     # Lấy email trong DB so với email người dùng nhập lên
-    # DB: caulac2004@gmail.com  VS  Input: caulac2004@gmail.com
     if user.get("email_recover") != body.email:
         raise HTTPException(status_code=400, detail="Email cung cấp không khớp với tài khoản này.")
     
@@ -229,6 +227,7 @@ async def forgot_password(body: ForgotPasswordRequest):
     
     # 6. Gửi Email thật
     try:
+        # Sử dụng hàm send_reset_email đã được resolve ở file core/email_utils.py
         await send_reset_email(body.email, reset_token)
     except Exception as e:
         print(f"Lỗi gửi mail: {e}")
@@ -252,7 +251,7 @@ async def reset_password(body: ResetPasswordRequest):
         
     # 3. Kiểm tra pass nhập lại
     if body.new_password != body.confirm_password:
-         raise HTTPException(status_code=400, detail="Mật khẩu nhập lại không khớp.")
+          raise HTTPException(status_code=400, detail="Mật khẩu nhập lại không khớp.")
 
     # 4. Băm mật khẩu mới
     hashed_pw = get_password_hash(body.new_password)

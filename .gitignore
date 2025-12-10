@@ -1,3 +1,18 @@
+# Ignore static files
+static/*
+
+# Ignore log files
+logs/*
+
+# Ignore test related files
+test_photos
+test_local.py
+
+.dockerignore
+temp/
+processed/
+
+node_modules/
 # --- Chặn file cấu hình & mật khẩu (QUAN TRỌNG) ---
 .env
 config.env
