@@ -45,7 +45,7 @@ def get_corpus(df: pd.DataFrame) -> List[str]:
             f"Location: {row.get('location_province', '')}, {row.get('specific_address', '')}. "
             f"Rating: {row.get('overall_rating', '')}/5. "
             f"Description: {row.get('info_summary', '')}. "
-            f"Tags: {row.get('activity_tags & vibe_tags (Combined_tags)', '')}. "
+            f"Tags: {row.get('combined_tags', '')}. "
             f"Season: {row.get('season_tags', '')}."
             f"Budget range: {row.get('budget_range', '')}."
             f"Available time: {row.get('available_time_needed', '')}."
@@ -121,7 +121,7 @@ def run_ingestion():
         hybrid_vector = vectorizer.transform_single(text_chunk)
         
         # Xử lý tags thành mảng (dùng hàm mới split theo ;)
-        combined_tags = process_tags_to_array(row.get('activity_tags & vibe_tags (Combined_tags)', ''))
+        combined_tags = process_tags_to_array(row.get('combined_tags', ''))
         available_time_tags = process_tags_to_array(row.get('available_time_needed', ''))
         season_tags = process_tags_to_array(row.get('season_tags', ''))
         companion_tags = process_tags_to_array(row.get('companion_tags', ''))
