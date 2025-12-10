@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     
     # OpenWeather
     OPENWEATHER_API_KEY: str
+    
+    SECRET_KEY: str 
+    ALGORITHM: str 
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
 # Khởi tạo một instance để các file khác có thể import
 settings = Settings()

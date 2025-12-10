@@ -4,6 +4,11 @@ uvicorn[standard]
 pydantic-settings
 openpyxl
 
+# --- Security & Auth  ---
+python-jose[cryptography]
+passlib[bcrypt]
+requests
+
 # --- Database & Storage ---
 pymongo
 
