@@ -1,23 +1,27 @@
 FROM python:3.10
 
+# 1. Create a non-root user early to use with --chown
+RUN useradd -m -u 1000 user
+
 WORKDIR /code
 
-# Copy only requirements first to leverage Docker layer cache
+# 2. Copy only requirements first to leverage Docker layer cache
 COPY ./requirements.txt /code/requirements.txt
 
-# Upgrade pip then install dependencies
+# 3. Upgrade pip then install dependencies
 RUN python -m pip install --no-cache-dir --upgrade pip && \
 	pip install --no-cache-dir -r /code/requirements.txt
 
-# Copy application code (a .dockerignore is recommended to avoid including secrets)
-COPY . /code
+# 4. Copy application code and set ownership to 'user' for security/permissions
+# A .dockerignore is recommended to exclude unnecessary files (like .git, secrets)
+COPY --chown=user . /code
 
-# Create a non-root user for running the service
-RUN useradd -m -u 1000 user
+# 5. Switch to the non-root user
 USER user
+
+# 6. Set environment variables
 ENV HOME=/home/user \
 	PATH=/home/user/.local/bin:$PATH
 
-# Use the PORT environment variable provided by hosting (Hugging Face Spaces)
-# Fallback to 8000 locally if PORT is not set
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+# 7. IMPORTANT: Use port 7860 for Hugging Face Spaces
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]

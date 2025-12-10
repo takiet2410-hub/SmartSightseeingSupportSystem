@@ -1,54 +1,102 @@
+# core/email_utils.py
 import os
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+import requests
 from pydantic import EmailStr
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Cấu hình kết nối (Đọc từ .env)
-conf = ConnectionConfig(
-    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
-    MAIL_FROM=os.getenv("MAIL_USERNAME"),
-    MAIL_PORT=int(os.getenv("MAIL_PORT", 587)),
-    MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
-)
+# Lấy API Key từ biến môi trường
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
-async def send_reset_email(email: EmailStr, token: str):
-    # Link trỏ về Frontend (User sẽ bấm vào đây)
-    # Bạn nhớ thay đổi http://localhost:3000 thành domain thật khi deploy
-    reset_link = f"http://localhost:8000/reset-password?token={token}"
+# Cấu hình thông tin người gửi (Nên dùng email bạn đã đăng ký Brevo)
+SENDER_EMAIL = os.getenv("MAIL_USERNAME", "noreply.smarttourism@gmail.com") 
+SENDER_NAME = "Smart Sightseeing Support System"
+
+async def send_email_via_brevo(to_email: str, subject: str, html_content: str):
+    """Hàm chung để gửi email qua Brevo API"""
+    url = "https://api.brevo.com/v3/smtp/email"
     
-    html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2c3e50;">Yêu cầu đặt lại mật khẩu</h2>
-        <p>Xin chào,</p>
-        <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
-        <p>Vui lòng bấm vào nút bên dưới để tạo mật khẩu mới (Link hết hạn sau 15 phút):</p>
+    payload = {
+        "sender": {
+            "name": SENDER_NAME,
+            "email": SENDER_EMAIL
+        },
+        "to": [
+            {
+                "email": to_email
+            }
+        ],
+        "subject": subject,
+        "htmlContent": html_content
+    }
+    
+    headers = {
+        "accept": "application/json",
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json"
+    }
+    
+    try:
+        # Dùng requests để gửi lệnh POST (HTTP) thay vì SMTP
+        response = requests.post(url, json=payload, headers=headers)
         
-        <a href="{reset_link}" style="background-color: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
-            Đặt lại mật khẩu
-        </a>
-        
-        <p style="color: #7f8c8d; font-size: 0.9em;">Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
-        <hr style="border: 0; border-top: 1px solid #eee;" />
-        <p style="font-size: 0.8em; color: #999;">Smart Tourism Support Team</p>
-    </div>
+        # Kiểm tra xem gửi thành công không (Code 201 là thành công)
+        if response.status_code == 201:
+            print(f"✅ Đã gửi mail thành công tới {to_email}")
+            return True
+        else:
+            print(f"❌ Lỗi gửi mail Brevo: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Lỗi kết nối Brevo: {e}")
+        return False
+
+# --- Hàm gửi xác thực tài khoản ---
+async def send_verification_email(email: EmailStr, token: str):
+    # 👇 THAY LINK NÀY BẰNG LINK DIRECT SPACE CỦA BẠN
+    # Cách lấy: Vào Space -> Bấm "Embed this space" -> Copy cái "Direct URL"
+    base_url = "https://takiet2410-auth-server.hf.space"
+    
+    # Link trỏ về API Backend để kích hoạt
+    verification_link = f"{base_url}/auth/verify-email?token={token}"
+    
+    subject = "[Smart Tourism] Kích hoạt tài khoản"
+    html_content = f"""
+    <html>
+        <body>
+            <h2>Xin chào!</h2>
+            <p>Cảm ơn bạn đã đăng ký. Vui lòng bấm vào link dưới để kích hoạt:</p>
+            <a href="{verification_link}" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px;">
+                Kích hoạt ngay
+            </a>
+            <p>Hoặc copy link này: {verification_link}</p>
+        </body>
+    </html>
     """
+    
+    return await send_email_via_brevo(email, subject, html_content)
 
-    message = MessageSchema(
-        subject="[Smart Tourism] Hướng dẫn đặt lại mật khẩu",
-        recipients=[email],
-        body=html,
-        subtype=MessageType.html
-    )
-
-    fm = FastMail(conf)
-    await fm.send_message(message)
-    return True
-
-
+# --- Hàm gửi quên mật khẩu ---
+async def send_reset_email(email: EmailStr, token: str):
+    base_url = "https://takiet2410-auth-server.hf.space"
+    
+    # Link trỏ về trang Giao diện HTML (main.py)
+    reset_link = f"{base_url}/reset-password?token={token}"
+    
+    subject = "[Smart Tourism] Đặt lại mật khẩu"
+    html_content = f"""
+    <html>
+        <body>
+            <h2>Yêu cầu đặt lại mật khẩu</h2>
+            <p>Bấm vào nút bên dưới để tạo mật khẩu mới:</p>
+            <a href="{reset_link}" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+                Đổi mật khẩu
+            </a>
+            <p>Link hết hạn sau 15 phút.</p>
+        </body>
+    </html>
+    """
+    
+    return await send_email_via_brevo(email, subject, html_content)

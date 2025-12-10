@@ -15,7 +15,8 @@ from google.auth.transport import requests as google_requests
 import uuid
 from datetime import datetime, timedelta
 from schemas import ForgotPasswordRequest, ResetPasswordRequest
-from core.email_utils import send_reset_email
+from core.email_utils import send_reset_email, send_verification_email # KEEP BOTH EMAIL UTILS
+from fastapi.responses import RedirectResponse # KEEP RedirectResponse
 
 router = APIRouter()
 
@@ -36,6 +37,9 @@ async def register(user: UserRegister):
     # Băm mật khẩu
     hashed_password = get_password_hash(user.password)
     
+    # Tạo Verification Token
+    verification_token = str(uuid.uuid4())
+
     # Lưu vào MongoDB
     new_user = {
         "username": user.username,
@@ -43,11 +47,45 @@ async def register(user: UserRegister):
         "auth_provider": "local", 
         "full_name": user.username.split("@")[0], # Lấy tên tạm từ email
         "created_at": None,
-        "email_recover": user.email
+        "email_recover": user.email,
+
+        "is_active": False,  # Mặc định chưa kích hoạt
+        "verification_token": verification_token
     }
     user_collection.insert_one(new_user)
     
-    return {"message": "Đăng ký thành công!"}
+    # Gửi Email xác thực
+    try:
+        await send_verification_email(user.email, verification_token)
+    except Exception as e:
+        print(f"Lỗi gửi mail verification: {e}")
+        # Tùy chọn: Có thể xóa user vừa tạo nếu gửi mail lỗi để họ đk lại
+        raise HTTPException(status_code=500, detail="Lỗi gửi email xác thực.")
+
+    return {"message": "Đăng ký thành công! Vui lòng kiểm tra email để kích hoạt tài khoản."}
+
+# --- 1.1 THÊM API XÁC THỰC EMAIL (Endpoint Mới) ---
+@router.get("/verify-email")
+async def verify_email_endpoint(token: str):
+    # 1. Server nhận token từ link người dùng bấm
+    user = user_collection.find_one({"verification_token": token})
+    
+    # 2. Nếu token sai hoặc link cũ -> Báo lỗi
+    if not user:
+        raise HTTPException(status_code=400, detail="Token không hợp lệ hoặc đã hết hạn.")
+    
+    # 3. QUAN TRỌNG: Cập nhật Database (Kích hoạt tài khoản)
+    user_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {"is_active": True},      # Bật active lên True
+            "$unset": {"verification_token": ""} # Xóa token đi
+        }
+    )
+    
+    # 4. Xong việc -> Đưa người dùng về trang Đăng nhập
+    # Note: /docs is just for testing. In production, this should redirect to your frontend login page.
+    return RedirectResponse(url="/docs")
 
 # --- 2. API ĐĂNG NHẬP THƯỜNG (Login Local) ---
 @router.post("/login", response_model=Token)
@@ -66,6 +104,15 @@ async def login(user: UserAuth):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # --- CHECK TÀI KHOẢN ĐÃ KÍCH HOẠT CHƯA ---
+    # Nếu trường is_active là False thì chặn lại
+    # Dùng .get("is_active", True) để tương thích ngược với các user cũ (coi như đã active)
+    if not db_user.get("is_active", True): 
+        raise HTTPException(
+            status_code=400,
+            detail="Tài khoản chưa được kích hoạt. Vui lòng kiểm tra email."
+        )
+
     # Tạo Token
     user_id = str(db_user["_id"])
     access_token = create_access_token(data={"sub": user_id})
@@ -117,7 +164,9 @@ async def login_google(body: GoogleAuth):
                 "password": None, # Không có pass
                 "auth_provider": "google",
                 "created_at": None,
-                "email_recover": None
+                "email_recover": None,
+
+                "is_active": True # Google thì luôn Active
             }
             result = user_collection.insert_one(new_user)
             user_id = str(result.inserted_id)
@@ -143,7 +192,6 @@ async def login_google(body: GoogleAuth):
         raise HTTPException(500, "Lỗi xác thực Google")
     
 
-
 # --- 4. API QUÊN MẬT KHẨU (Gửi Email) ---
 @router.post("/forgot-password")
 async def forgot_password(body: ForgotPasswordRequest):
@@ -159,7 +207,6 @@ async def forgot_password(body: ForgotPasswordRequest):
 
     # 3. KIỂM TRA KHỚP EMAIL (Logic bạn muốn)
     # Lấy email trong DB so với email người dùng nhập lên
-    # DB: caulac2004@gmail.com  VS  Input: caulac2004@gmail.com
     if user.get("email_recover") != body.email:
         raise HTTPException(status_code=400, detail="Email cung cấp không khớp với tài khoản này.")
     
@@ -180,6 +227,7 @@ async def forgot_password(body: ForgotPasswordRequest):
     
     # 6. Gửi Email thật
     try:
+        # Sử dụng hàm send_reset_email đã được resolve ở file core/email_utils.py
         await send_reset_email(body.email, reset_token)
     except Exception as e:
         print(f"Lỗi gửi mail: {e}")
@@ -203,7 +251,7 @@ async def reset_password(body: ResetPasswordRequest):
         
     # 3. Kiểm tra pass nhập lại
     if body.new_password != body.confirm_password:
-         raise HTTPException(status_code=400, detail="Mật khẩu nhập lại không khớp.")
+          raise HTTPException(status_code=400, detail="Mật khẩu nhập lại không khớp.")
 
     # 4. Băm mật khẩu mới
     hashed_pw = get_password_hash(body.new_password)
@@ -274,7 +322,8 @@ async def login_facebook(body: FacebookAuth):
                 "auth_provider": "facebook",
                 "facebook_id": fb_id, # Lưu thêm ID gốc của FB để chắc chắn
                 "created_at": datetime.utcnow(),
-                "email_recover": email # Có thể None nếu FB ko trả về
+                "email_recover": email, # Có thể None nếu FB ko trả về
+                "is_active": True # Facebook thì luôn Active
             }
             result = user_collection.insert_one(new_user)
             user_id = str(result.inserted_id)

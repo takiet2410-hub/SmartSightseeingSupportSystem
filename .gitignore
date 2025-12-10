@@ -1,12 +1,3 @@
-# Ignore Visual Studio Code settings folder
-.vscode/
-
-# Ignore Python bytecode files
-__pycache__/
-
-# Ignore environment variable files
-.env
-
 # Ignore static files
 static/*
 
@@ -22,3 +13,16 @@ temp/
 processed/
 
 node_modules/
+# --- Chặn file cấu hình & mật khẩu (QUAN TRỌNG) ---
+.env
+config.env
+*.key
+
+# --- Chặn rác Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Chặn file hệ thống ---
+.DS_Store
+.vscode/
