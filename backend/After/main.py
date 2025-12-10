@@ -12,7 +12,6 @@ import hashlib
 from typing import List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-import uuid
 from datetime import datetime
 
 from PIL import Image
