@@ -20,6 +20,8 @@ joblib
 hf_xet
 google-generativeai
 
+#--- Unit Test ---
 pytest 
 httpx 
 mongomock
+pytest-asyncio
