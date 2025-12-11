@@ -19,3 +19,7 @@ sentence-transformers
 joblib
 hf_xet
 google-generativeai
+
+pytest 
+httpx 
+mongomock

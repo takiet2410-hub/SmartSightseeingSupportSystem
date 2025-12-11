@@ -133,52 +133,70 @@ def get_destination_details(landmark_id: str) -> Optional[Dict[str, Any]]:
 # --- 3. VECTOR SEARCH FOR AI  ---
 def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardConstraints] = None) -> List[Dict[str, Any]]:
     collection = get_db_collection()
-    
-    # Chỉ thực hiện Vector Search thuần túy
+    candidates_limit = 150
+    threshold = 0.61
+
     vector_search_stage = {
-        "$vectorSearch": {
-            "index": "vector_index", 
-            "path": "v_hybrid",       
-            "queryVector": query_vector,
-            "numCandidates": 100, 
-            "limit": 20, 
-        }
+        "index": "vector_index",
+        "path": "v_hybrid",
+        "queryVector": query_vector,
+        "numCandidates": 1000,
+        "limit": candidates_limit
     }
-    
+
+    # Gắn filter nếu có
     if hard_constraints:
-        search_filter = build_vector_search_filter(hard_constraints)
-        if search_filter:
-            vector_search_stage["$vectorSearch"]["filter"] = search_filter
+        mongo_filter = build_filter_query(hard_constraints)
+        if mongo_filter:
+            vector_search_stage["filter"] = mongo_filter
 
     pipeline = [
-        vector_search_stage,
-        {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
-        {"$sort": {"score": -1}}, 
-        {"$limit": 20},
-        {"$project": {
+        # Stage 1: Tìm kiếm (Bắt buộc phải có limit)
+        {
+            "$vectorSearch": vector_search_stage
+        },
+        # Stage 2: Lấy điểm số ra
+        {
+            "$project": {
+                "_id": 1,
                 "landmark_id": 1,
                 "name": 1,
-                "description": 1,
-                "location_province": 1,
-                "image_urls": 1,
-                "overall_rating": 1,
-                "score": 1,
-                "season_tag": 1,
+                "specific_address": 1,
                 "budget_range": 1,
                 "available_time": 1,
-                "companion_tag": 1
+                "season_tag": 1,
+                "companion_tag": 1,
+                "combined_tags": 1,
+                "description": 1,
+                "image_urls": 1,
+                "location_province": 1,
+                "overall_rating": 1,
+                "score": {"$meta": "vectorSearchScore"} 
+            }
+        },
+        # Stage 3: Lọc chặn dưới
+        # Chỉ giữ lại những kết quả thực sự giống
+        {
+            "$match": {
+                "score": {"$gte": threshold}
             }
         }
     ]
-    
+
     try:
         results = list(collection.aggregate(pipeline))
         
+        # Xử lý làm sạch dữ liệu (như cũ)
         for doc in results:
-            doc["id"] = str(doc.get("landmark_id", doc.get("_id", "")))
-            if "_id" in doc: del doc["_id"]
-            
+            doc["_id"] = str(doc["_id"])
+            doc["id"] = str(doc.get("landmark_id", doc.get("_id")))
+            if doc.get("image_urls") is None: doc["image_urls"] = []
+            if doc.get("overall_rating") is None: doc["overall_rating"] = 0.0
+
+        # In ra để debug xem lọc còn bao nhiêu
+        print(f"✅ Found {len(results)} items with score >= {threshold} (Pool size: {candidates_limit})")
         return results
+        
     except Exception as e:
-        print(f"Error Vector Search: {e}")
+        print(f"❌ Error in vector search: {e}")
         return []

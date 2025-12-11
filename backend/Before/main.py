@@ -49,14 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    print(f"🔥 LỖI NGHIÊM TRỌNG (500) TẠI {request.url}: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"message": "Internal Server Error", "detail": str(exc)},
-    )
-
 @app.get("/", tags=["Health"])
 def root():
     """Health check endpoint"""
@@ -153,7 +145,7 @@ async def get_destination_detail(landmark_id: str):
 # ==========================================
 @app.post("/recommendations", response_model=RecommendationResponse)
 async def get_recommendations(request: RecommendationRequest):
-    """Tìm kiếm bằng AI + Vector Search"""
+    """Tìm kiếm bằng AI + Vector Search """
     try:
         # 1. Vector Search
         query_vector = vectorizer.transform_single(request.vibe_prompt)
@@ -162,39 +154,57 @@ async def get_recommendations(request: RecommendationRequest):
         if not retrieved_context:
             return RecommendationResponse(status="empty", recommendations=[])
 
-        # 2. Tạo Map để enrichment (Key: Tên chuẩn hóa -> Value: Document gốc)
-        context_map = {normalize_key(doc['name']): doc for doc in retrieved_context}
-
+        # 2. Tạo Map để enrichment
+        # Đảm bảo hàm normalize_key đã được định nghĩa
+        context_map = {normalize_key(doc.get('name', '')): doc for doc in retrieved_context}
+        
         # 3. Gọi Gemini LLM
-        context_str = "\n".join([f"- {doc['name']}: {doc.get('description','')[:200]}..." for doc in retrieved_context])
+        context_str = "\n".join([f"- {doc.get('name')}: {doc.get('description','')[:200]}..." for doc in retrieved_context])
         prompt = build_rag_prompt(context=context_str, user_query=request.vibe_prompt)
+        
+        # Gọi hàm LLM (Đảm bảo đã fix lỗi 404 model ở bước trước)
         llm_response = parse_llm_response(call_llm_api(prompt))
         
+        # --- XỬ LÝ FALLBACK (KHI LLM LỖI) ---
         if "error" in llm_response:
-             # Fallback nếu LLM lỗi: trả về kết quả vector search thô
-             fallback_recs = []
-             for doc in retrieved_context[:3]:
-                 doc_copy = doc.copy()
-                 doc_copy["justification_summary"] = "Gợi ý tự động (LLM Error)"
-                 fallback_recs.append(doc_copy)
-             return RecommendationResponse(status="fallback", recommendations=fallback_recs)
+            print("⚠️ LLM Error, dùng Fallback.")
+            fallback_recs = []
+            for doc in retrieved_context[:3]:
+                doc_copy = doc.copy()
+                doc_copy["justification_summary"] = "Gợi ý tự động theo mức độ phù hợp (AI đang bận)"
+                doc_copy["suggested_activities"] = []
+                 
+                # [FIX LỖI SCHEMA] Map _id sang id
+                doc_copy[" id"] = str(doc_copy.get("landmark_id", doc_copy.get("_id", "")))
+                 
+                fallback_recs.append(doc_copy)
+            return RecommendationResponse(status="fallback", recommendations=fallback_recs)
 
         # 4. Ghép dữ liệu (Enrichment)
         final_recs = []
+        
+        print("\n--- DEBUG MATCHING ---")
+        # In ra danh sách các tên ĐANG CÓ trong Map (Dữ liệu gốc tìm được)
+        print(f"Context Map Keys: {list(context_map.keys())}")
+        
         for rec in llm_response.get("recommendations", []):
             key = normalize_key(rec.get("name"))
+            normalized_ai_name = normalize_key(key)
+            print(f"🤖 Gemini gợi ý: '{key}' -> Key chuẩn hóa: '{normalized_ai_name}'")
             original = context_map.get(key)
             
             if original:
-                # Merge thông tin: Lấy ID và thông tin cứng từ DB, Lấy justification từ AI
-                merged_rec = original.copy() # Chứa id, image, rating...
+                print("   ✅ MATCHED! (Tìm thấy trong DB)")
+                merged_rec = original.copy()
+                merged_rec["id"] = str(original.get("landmark_id", original.get("_id", "")))
                 merged_rec["justification_summary"] = rec.get("justification_summary")
                 merged_rec["suggested_activities"] = rec.get("suggested_activities", [])
                 
-                # Lấy thời tiết cho các địa điểm gợi ý luôn
+                # Lấy thời tiết
                 province = merged_rec.get("location_province", "").replace("Tỉnh", "").strip()
                 try:
-                    merged_rec["weather"] = await get_current_weather(province)
+                    if province:
+                        merged_rec["weather"] = await get_current_weather(province)
                 except:
                     merged_rec["weather"] = None
                 
@@ -203,47 +213,50 @@ async def get_recommendations(request: RecommendationRequest):
         return RecommendationResponse(status="success", recommendations=final_recs)
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in /recommendations: {e}")
+        import traceback
+        traceback.print_exc() # In lỗi chi tiết ra terminal
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 # API 4: SEMANTIC SEARCH (Vector Search Only)
 # ==========================================
-@app.post("/search", response_model=SearchResponse)
-async def semantic_search(request: SearchRequest):
-    """
-    Tìm kiếm thông minh dựa trên Vector (Vibe Search).
-    - Tốc độ nhanh (Không dùng LLM).
-    - Hiểu ngữ nghĩa (VD: "lạnh" -> tìm Đà Lạt, Sapa).
-    """
-    try:
-        # 1. Vector hóa câu query
-        query_vector = vectorizer.transform_single(request.query)
-        
-        # 2. Gọi hàm retrieve_context (Hàm này đã có sẵn ở retrieval.py)
-        # Lưu ý: Hàm này trả về Top K kết quả gần nhất
-        raw_results = retrieve_context(query_vector, hard_constraints=request.hard_constraints)
-        
-        # 3. Chuẩn hóa dữ liệu trả về (Mapping sang DestinationSummary)
-        final_results = []
-        for doc in raw_results:
-            # Mapping an toàn
-            item = DestinationSummary(
-                id=str(doc.get("landmark_id", "")), # Map landmark_id -> id
-                name=doc.get("name", "Unknown"),
-                location_province=doc.get("location_province", ""),
-                image_urls=doc.get("image_urls", []),
-                overall_rating=doc.get("overall_rating", 0.0)
-            )
-            final_results.append(item)
-            
-        return SearchResponse(
-            data=final_results,
-            total_found=len(final_results)
-        )
 
-    except Exception as e:
-        print(f"Search Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/search", response_model=PaginatedResponse) 
+async def search_destinations(
+    request: SearchRequest, 
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50)
+):
+    # ... logic tìm kiếm giữ nguyên ...
+    query_vector = vectorizer.transform_single(request.query)
+    
+    # Truyền request.hard_constraints vào hàm xử lý
+    all_results = retrieve_context(query_vector, request.hard_constraints)
+    
+    # ... logic phân trang ...
+    total_found = len(all_results)
+    total_pages = (total_found + limit - 1) // limit 
+    start_index = (page - 1) * limit
+    paginated_data = all_results[start_index : start_index + limit]
+    
+    # ... mapping dữ liệu ...
+    clean_results = [
+        DestinationSummary(
+            id=str(doc.get("landmark_id", doc.get("_id"))),
+            name=doc.get("name", "Unknown"),
+            location_province=doc.get("location_province", ""),
+            image_urls=doc.get("image_urls", []) or [],
+            overall_rating=doc.get("overall_rating", 0.0)
+        ) for doc in paginated_data
+    ]
+
+    return {
+        "data": clean_results,
+        "total": total_found,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages
+    }
 
 if __name__ == "__main__":
     import uvicorn
