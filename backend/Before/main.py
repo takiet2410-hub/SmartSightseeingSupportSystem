@@ -6,6 +6,7 @@ import os
 import requests 
 from fastapi.security import OAuth2PasswordRequestForm
 from schemas import SortOption
+from fastapi.responses import JSONResponse
 
 # Import modules
 from schemas import (
@@ -18,7 +19,7 @@ from modules.retrieval import retrieve_context, get_destinations_paginated, get_
 from modules.generation import build_rag_prompt, call_llm_api, parse_llm_response
 from modules.weather import get_current_weather
 from core.config import settings
-
+from typing import List, Optional
 import favorites
 
 # Khởi tạo Vectorizer
@@ -47,6 +48,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"🔥 LỖI NGHIÊM TRỌNG (500) TẠI {request.url}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal Server Error", "detail": str(exc)},
+    )
 
 @app.get("/", tags=["Health"])
 def root():
@@ -93,12 +102,27 @@ app.include_router(favorites.router, prefix="/favorites", tags=["User Favorites"
 # ==========================================
 @app.get("/destinations", response_model=PaginatedResponse)
 async def list_destinations(
-    filters: HardConstraints = Depends(),
-    sort_by: SortOption = Query(SortOption.RATING_DESC, description="Sắp xếp theo: Tên (A-Z) hoặc Rating"),
+    
+    budget_range: Optional[List[str]] = Query(None, description="Lọc theo ngân sách"),
+    available_time: Optional[List[str]] = Query(None, description="Lọc theo thời gian"),
+    companion_tag: Optional[List[str]] = Query(None, description="Lọc theo người đi cùng"),
+    season_tag: Optional[List[str]] = Query(None, description="Lọc theo mùa"),
+    location_province: Optional[str] = Query(None, description="Lọc theo tỉnh"),
+    # -----------------------
+    
+    sort_by: SortOption = Query(SortOption.RATING_DESC),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50)
 ):
-    """Hiển thị danh sách địa điểm theo trang và bộ lọc cơ bản (Không dùng AI)"""
+    # Bước 2: Gom lại thành object HardConstraints để truyền cho hàm xử lý
+    filters = HardConstraints(
+        budget_range=budget_range,
+        available_time=available_time,
+        companion_tag=companion_tag,
+        season_tag=season_tag,
+        location_province=location_province
+    )
+
     return get_destinations_paginated(filters, sort_by, page, limit)
 
 # ==========================================

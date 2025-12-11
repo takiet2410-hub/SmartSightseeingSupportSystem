@@ -77,10 +77,36 @@ def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption
                        .limit(limit)
     
     results = []
-    for doc in cursor:
-        doc["id"] = str(doc.get("landmark_id", "")) 
-        results.append(doc)
-        
+    print(f"--- Đang xử lý trang {page} ---")
+    
+    for index, doc in enumerate(cursor):
+        try:
+            # 1. FIX LỖI OBJECT ID (Quan trọng nhất)
+            if "_id" in doc:
+                doc["_id"] = str(doc["_id"]) # Chuyển ObjectId thành string ngay lập tức
+            
+            # 2. Xử lý ID
+            # Ưu tiên landmark_id, nếu không có thì lấy _id đã string hóa
+            doc["id"] = str(doc.get("landmark_id", doc.get("_id", "")))
+
+            # 3. Xử lý Rating (Chống null)
+            if doc.get("overall_rating") is None:
+                doc["overall_rating"] = 0.0
+            
+            # 4. Xử lý Image (Chống null)
+            if doc.get("image_urls") is None:
+                doc["image_urls"] = []
+
+            results.append(doc)
+            
+        except Exception as e:
+            # IN LỖI RA TERMINAL ĐỂ BẠN THẤY
+            print(f"❌ LỖI DATA TẠI ITEM #{index} (Landmark ID: {doc.get('landmark_id')}):")
+            print(f"   Lý do: {e}")
+            # continue giúp bỏ qua item lỗi này, không làm sập cả trang
+            continue 
+    # --- KẾT THÚC ĐOẠN CODE SỬA ---
+
     return {
         "data": results,
         "total": total_docs,

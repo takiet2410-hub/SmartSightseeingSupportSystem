@@ -17,13 +17,31 @@ class WeatherInfo(BaseModel):
     icon: str = Field(..., description="Mã icon của OpenWeather")
 
 class HardConstraints(BaseModel):
-    # Dùng cho cả filter danh sách và AI
-    budget_range: Optional[List[str]] = Field(default=None, description="Ngân sách (multi-select)")
-    available_time: Optional[List[str]] = Field(default=None, description="Thời gian rảnh")
-    companion_tag: Optional[List[str]] = Field(default=None, description="Bạn đồng hành")
-    season_tag: Optional[List[str]] = Field(default=None, description="Mùa")
-    location_province: Optional[str] = Field(default=None, description="Lọc theo tỉnh thành")
-
+    budget_range: Optional[List[str]] = Query(
+        default=None, 
+        description="Ngân sách (multi-select), VD: ?budget_range=thấp&budget_range=cao"
+    )
+    
+    available_time: Optional[List[str]] = Query(
+        default=None, 
+        description="Thời gian rảnh"
+    )
+    
+    companion_tag: Optional[List[str]] = Query(
+        default=None, 
+        description="Bạn đồng hành"
+    )
+    
+    season_tag: Optional[List[str]] = Query(
+        default=None, 
+        description="Mùa"
+    )
+    
+    location_province: Optional[str] = Query(
+        default=None, 
+        description="Lọc theo tỉnh thành"
+    )
+    
 # --- 2. PAGINATION & LIST VIEW SCHEMAS ---
 class DestinationSummary(BaseModel):
     # Khớp với logic: Backend sẽ gán landmark_id vào field này
