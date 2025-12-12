@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import shared_resources
 import cloudinary.uploader 
 import io
@@ -46,7 +47,8 @@ def add_history_record(
     elif uploaded_image_bytes:
         current_image_hash = get_image_hash(uploaded_image_bytes)
 
-    timestamp = custom_timestamp if custom_timestamp else datetime.utcnow().isoformat()
+    vn_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) 
+    timestamp = custom_timestamp if custom_timestamp else vn_time.isoformat()
     
     # --- CHECK DUPLICATE ---
     for i, item in enumerate(history_list):
@@ -96,7 +98,7 @@ def add_history_record(
     if not user_doc:
         col.insert_one({
             "user_id": user_id,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             "history": [new_record]
         })
     else:
@@ -112,7 +114,8 @@ def add_temp_record(temp_id: str, landmark_data: dict, uploaded_image_bytes: byt
     temp_doc = col.find_one({"temp_id": temp_id})
     
     current_image_hash = get_image_hash(uploaded_image_bytes)
-    current_time_iso = datetime.utcnow().isoformat()
+    # Lấy giờ hiện tại theo múi giờ Hồ Chí Minh
+    current_time_iso = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()
 
     history_list = temp_doc.get("history", []) if temp_doc else []
     
@@ -145,7 +148,7 @@ def add_temp_record(temp_id: str, landmark_data: dict, uploaded_image_bytes: byt
     if not temp_doc:
         col.insert_one({
             "temp_id": temp_id,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             "history": [new_record]
         })
     else:
