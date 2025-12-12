@@ -226,17 +226,27 @@ async def get_recommendations(request: RecommendationRequest):
 
 @app.post("/search", response_model=PaginatedResponse) 
 async def search_destinations(
-    request: SearchRequest, 
+    request: SearchRequest,
+    sort_by: SortOption = Query(SortOption.RATING_DESC),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50)
 ):
     # ... logic tìm kiếm giữ nguyên ...
     query_vector = vectorizer.transform_single(request.query)
     
-    # Truyền request.hard_constraints vào hàm xử lý
     all_results = retrieve_context(query_vector, request.hard_constraints)
     
-    # ... logic phân trang ...
+    # 2. Xử lý SORT LIST (Sort In-Memory)
+    
+    if sort_by == SortOption.RATING_DESC:
+        all_results.sort(key=lambda x: x.get("overall_rating", 0.0), reverse=True)
+    elif sort_by == SortOption.RATING_ASC:
+        all_results.sort(key=lambda x: x.get("overall_rating", 0.0), reverse=False)
+    elif sort_by == SortOption.NAME_ASC:
+        all_results.sort(key=lambda x: x.get("name", ""), reverse=False)
+    elif sort_by == SortOption.NAME_DESC:
+        all_results.sort(key=lambda x: x.get("name", ""), reverse=True)
+    
     total_found = len(all_results)
     total_pages = (total_found + limit - 1) // limit 
     start_index = (page - 1) * limit
