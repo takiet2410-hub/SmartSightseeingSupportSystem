@@ -156,10 +156,13 @@ async def get_recommendations(request: RecommendationRequest):
 
         # 2. Tạo Map để enrichment
         # Đảm bảo hàm normalize_key đã được định nghĩa
-        context_map = {normalize_key(doc.get('name', '')): doc for doc in retrieved_context}
-        
+        top_context = retrieved_context[:20]
+        context_map = {normalize_key(doc.get('name', '')): doc for doc in top_context}
         # 3. Gọi Gemini LLM
-        context_str = "\n".join([f"- {doc.get('name')}: {doc.get('description','')[:200]}..." for doc in retrieved_context])
+        context_str = "\n".join([
+            f"- {doc.get('name')}: {doc.get('description','')[:200]}..." 
+            for doc in top_context
+        ])
         prompt = build_rag_prompt(context=context_str, user_query=request.vibe_prompt)
         
         # Gọi hàm LLM (Đảm bảo đã fix lỗi 404 model ở bước trước)
