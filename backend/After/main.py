@@ -12,12 +12,11 @@ import hashlib
 from typing import List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-import uuid
 from datetime import datetime
 
 from PIL import Image
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import requests
@@ -35,13 +34,15 @@ from logger_config import logger
 from curation_service import CurationService
 from cloudinary_service import CloudinaryService
 from deps import get_current_user_id
-from db import album_collection
+from db import album_collection, summary_collection
+from connection_manager import ConnectionManager
 
 # 🚀 V2: Simple in-memory cache for duplicate detection
 _processed_cache = {}
 
 # Init Cloudinary
 cloud_service = CloudinaryService()
+manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -211,38 +212,23 @@ async def create_album(
         final_albums = []
         db_inserts = []
         
-        # Lặp qua từng album
+        # Lặp lại với enumerate để lấy lại đúng tag
         for index, album in enumerate(raw_albums):
             is_junk = album.method == "filters_rejected" or "Review Needed" in album.title
             
-            # Tạo ID mới cho mỗi album (Khắc phục lỗi duplicate key)
             album_id = str(uuid.uuid4())
-            
             output_photos = []
             db_photos_dict = []
-            
-            # [DANH SÁCH MỚI] Gom đường dẫn file trên máy để nén Zip
-            local_files_for_zip = [] 
-            
-            cover_url = None
+            has_cloud_photo = False
             
             for photo in album.photos:
                 orig = original_map.get(photo.filename)
                 if not orig: continue
                 
                 img_url = None
-                
-                # Logic lấy URL ảnh
                 if not is_junk and orig.local_path in uploaded_map:
                     img_url = uploaded_map[orig.local_path]
-                    
-                    # Lấy ảnh bìa
-                    if not cover_url: cover_url = img_url
-                    
-                    # [QUAN TRỌNG] Thêm đường dẫn file gốc vào danh sách nén
-                    if orig.local_path and os.path.exists(orig.local_path):
-                        local_files_for_zip.append(orig.local_path)
-                        
+                    has_cloud_photo = True
                 elif orig.local_path:
                     img_url = f"/images/{os.path.basename(orig.local_path)}"
                 
@@ -253,18 +239,23 @@ async def create_album(
                 )
                 output_photos.append(p_out)
                 
-                # Tạo dict cho DB
                 p_dict = p_out.dict()
-                if p_dict.get('timestamp'): 
-                    p_dict['timestamp'] = p_dict['timestamp'].isoformat()
+                if p_dict['timestamp']: p_dict['timestamp'] = p_dict['timestamp'].isoformat()
                 db_photos_dict.append(p_dict)
             
-            # Tạo Link Zip (Gọi hàm mới: Nén Local -> Upload Raw)
-            zip_url = None
-            if not is_junk and local_files_for_zip:
-                zip_url = cloud_service.create_and_upload_zip(album.title, local_files_for_zip)
+            # [SỬA LỖI] Lấy tag từ map thay vì getattr
+            safe_tag = album_tags_map.get(index)
             
-            # Tạo Object Album
+            zip_url = None
+            cover_url = None
+            
+            if not is_junk and has_cloud_photo and safe_tag:
+                zip_url = cloud_service.create_album_zip_link(safe_tag)
+                for p in output_photos:
+                    if p.image_url and "cloudinary" in p.image_url:
+                        cover_url = p.image_url
+                        break
+            
             album_out = Album(
                 id=album_id,
                 user_id=current_user_id,
@@ -277,27 +268,16 @@ async def create_album(
             )
             final_albums.append(album_out)
             
-            # Insert vào DB
             if not is_junk:
                 doc = album_out.dict()
                 doc['_id'] = album_id
                 db_inserts.append(doc)
         
-        # Lưu vào MongoDB
         if db_inserts:
             album_collection.insert_many(db_inserts)
-            logger.info(f"💾 Saved {len(db_inserts)} albums to MongoDB")
+            logger.info(f"Saved {len(db_inserts)} albums to MongoDB")
             
         return {"albums": final_albums}
-        
-        # Lưu DB
-        if db_inserts:
-            try:
-                album_collection.insert_many(db_inserts)
-                logger.info(f"💾 Saved {len(db_inserts)} albums to MongoDB")
-            except Exception as db_err:
-                logger.error(f"❌ DB Insert Error: {db_err}")
-                # Không raise lỗi ở đây để vẫn trả về kết quả cho user xem
 
     except Exception as e:
         logger.error(f"Logic Error: {e}")
@@ -322,22 +302,6 @@ async def health_check():
 async def cleanup_images():
     _processed_cache.clear()
     return {"status": "cleaned"}
-
-@app.post("/summary/create", response_model=TripSummaryResponse)
-async def create_trip_summary(request: TripSummaryRequest):
-    try:
-        summary_service = SummaryService()
-        manual_locs_dict = [m.dict() for m in request.manual_locations]
-        
-        # request.album_data giờ là Dict theo schema, truyền thẳng vào service
-        result = summary_service.generate_summary(
-            album_data=request.album_data,
-            manual_locations=manual_locs_dict
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Summary error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/swagger-login")
 async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -371,6 +335,89 @@ async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     except requests.exceptions.ConnectionError:
         raise HTTPException(status_code=503, detail="Không kết nối được tới Auth Service (Port 8001)")
     
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive, listen for messages (optional)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+
+# 🚀 3. UPDATE THE CREATE ENDPOINT (Save DB + Push to WebSocket)
+@app.post("/summary/create", response_model=TripSummaryResponse)
+async def create_trip_summary(
+    request: TripSummaryRequest,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Generate trip summary from album data
+    Supports both real user tokens and test scripts
+    """
+    try:
+        summary_service = SummaryService()
+        
+        # ✅ Handle manual_locations (can be dicts or Pydantic models)
+        manual_locs = []
+        if request.manual_locations:
+            for loc in request.manual_locations:
+                if isinstance(loc, dict):
+                    manual_locs.append(loc)
+                elif hasattr(loc, 'dict'):
+                    manual_locs.append(loc.dict())
+                else:
+                    logger.warning(f"Unknown manual_location type: {type(loc)}")
+        
+        # A. Generate summary
+        result = summary_service.generate_summary(
+            album_data=request.album_data,
+            manual_locations=manual_locs
+        )
+        
+        # B. Save to MongoDB
+        summary_doc = dict(result) if isinstance(result, dict) else result
+        summary_doc["created_at"] = datetime.utcnow()
+        summary_doc["user_id"] = current_user_id
+        
+        try:
+            summary_collection.insert_one(summary_doc)
+            logger.info(f"✅ Saved trip summary to MongoDB")
+        except Exception as e:
+            logger.error(f"MongoDB save failed: {e}")
+        
+        # C. Push to WebSocket
+        try:
+            await manager.send_personal_message(result, current_user_id)
+            logger.info(f"✅ Pushed to WebSocket for user: {current_user_id}")
+        except Exception as e:
+            logger.error(f"WebSocket push failed: {e}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Summary error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/summary/history")
+async def get_summary_history(user_id: str = "test_runner"):
+    """
+    Get a list of all past trip summaries for this user.
+    """
+    try:
+        # Fetch all records, sorted by newest first
+        cursor = summary_collection.find(
+            {"user_id": user_id},
+            {"_id": 0} # Exclude MongoDB ID to avoid serialization issues
+        ).sort("created_at", -1)
+        
+        history = list(cursor)
+        return history
+    except Exception as e:
+        logger.error(f"Error fetching history: {e}")
+        return []
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

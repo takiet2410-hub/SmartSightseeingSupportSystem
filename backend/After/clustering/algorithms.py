@@ -2,6 +2,8 @@ from typing import List
 from datetime import timedelta, datetime
 
 import numpy as np
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
 import jenkspy
 import hdbscan
 from sklearn.cluster import DBSCAN
@@ -14,6 +16,25 @@ from schemas import PhotoInput, PhotoOutput, Album
 from logger_config import logger
 
 EARTH_RADIUS_KM = 6371.0088
+
+geolocator = Nominatim(user_agent="smart_tourism_app_v1")
+
+def get_location_name(lat: float, lon: float) -> str:
+    try:
+        # Get address details in Vietnamese
+        location = geolocator.reverse((lat, lon), language='vi', zoom=10, timeout=5)
+        if not location:
+            return "Unknown Location"
+        
+        address = location.raw.get('address', {})
+        
+        # Prioritize City -> Province -> State -> Town
+        city = address.get('city') or address.get('province') or address.get('state') or address.get('town')
+        
+        return city if city else "Unknown Location"
+    except Exception as e:
+        logger.warning(f"Geocoding failed: {e}")
+        return "Unknown Location"
 
 # --- 1. GPS + TIME: ST-DBSCAN ---
 def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> List[Album]:
@@ -73,8 +94,19 @@ def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> L
             ) for p in batch]
 
             date_str = batch[0].timestamp.strftime('%Y-%m-%d')
+            lats = [p.latitude for p in batch if p.latitude]
+            lons = [p.longitude for p in batch if p.longitude]
+
+            location_title = "Event"
+            if lats and lons:
+                center_lat = sum(lats) / len(lats)
+                center_lon = sum(lons) / len(lons)
+                place_name = get_location_name(center_lat, center_lon)
+                if place_name != "Unknown Location":
+                    location_title = place_name
+
             final_albums.append(Album(
-                title=f"Event - {date_str}", 
+                title=f"{location_title} - {date_str}", 
                 method="st_dbscan", 
                 photos=out_photos
             ))
@@ -151,8 +183,20 @@ def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) ->
         ) for p in group]
         
         date_str = group[0].timestamp.strftime('%Y-%m-%d') if group[0].timestamp else "Undated"
+        lats = [p.latitude for p in group if p.latitude is not None]
+        lons = [p.longitude for p in group if p.longitude is not None]
+
+        location_title = f"Location Cluster #{label}"
+
+        if lats and lons:
+            center_lat = sum(lats) / len(lats)
+            center_lon = sum(lons) / len(lons)
+            place_name = get_location_name(center_lat, center_lon)
+            if place_name != "Unknown Location":
+                location_title = place_name
+            
         albums.append(Album(
-            title=f"Location Cluster #{label} - {date_str}", 
+            title=f"{location_title} - {date_str}", 
             method="gps_hdbscan", 
             photos=out_photos
         ))

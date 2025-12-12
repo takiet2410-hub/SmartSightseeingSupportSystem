@@ -61,7 +61,7 @@ class ClusteringService:
             logger.info(f"Router: Count={len(clean_photos)}, Time={has_time}, GPS={has_gps}")
 
             if has_gps and has_time:
-                albums = run_spatiotemporal(clean_photos, dist_m=500, gap_min=240)
+                albums = run_spatiotemporal(clean_photos, dist_m=700, gap_min=240)
             elif has_time:
                 albums = run_jenks_time(clean_photos)
             elif has_gps:
