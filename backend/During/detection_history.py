@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from datetime import datetime
+from typing import List
 from zoneinfo import ZoneInfo
 import shared_resources
+import cloudinary
 import cloudinary.uploader 
 import io
 import hashlib 
@@ -191,3 +193,83 @@ def sync_temp_history(
     temp_col.delete_one({"temp_id": temp_id})
 
     return {"status": "synced", "count": len(temp_history)}
+
+# =========================================================================
+# HELPER: Lấy Public ID từ URL Cloudinary
+# =========================================================================
+def get_public_id_from_url(image_url: str) -> str:
+    """
+    Input: https://res.cloudinary.com/demo/image/upload/v12345678/folder/sample.jpg
+    Output: folder/sample (Không có extension .jpg)
+    """
+    try:
+        if "cloudinary.com" not in image_url:
+            return None
+            
+        # Tách chuỗi để lấy phần sau 'upload/'
+        parts = image_url.split("/upload/")
+        if len(parts) < 2:
+            return None
+            
+        # Phần sau upload: v1765379710/gllvlbjh...jpg
+        path_part = parts[1]
+        
+        # Bỏ version (v12345...) nếu có
+        # Cloudinary version luôn bắt đầu bằng 'v' + số + '/'
+        if "/" in path_part and path_part.startswith("v"):
+            path_part = path_part.split("/", 1)[1]
+            
+        # Bỏ extension (.jpg, .png)
+        public_id = path_part.rsplit(".", 1)[0]
+        return public_id
+    except Exception as e:
+        print(f"Error parsing Cloudinary URL: {e}")
+        return None
+
+# =========================================================================
+# API: DELETE HISTORY (Xoá DB + Xoá Cloudinary)
+# =========================================================================
+@router.delete("/history/delete")
+def delete_history_items(
+    image_urls: List[str] = Body(..., embed=True), # Nhận JSON: {"image_urls": ["url1", "url2"]}
+    user_id: str = Depends(get_current_user_id)
+):
+    if not user_id:
+        raise HTTPException(401, "Authentication required.")
+
+    if not image_urls:
+        return {"status": "ignored", "message": "No items selected."}
+
+    # 1. Xoá ảnh trên Cloudinary
+    deleted_cloud_count = 0
+    for url in image_urls:
+        public_id = get_public_id_from_url(url)
+        if public_id:
+            try:
+                # Gọi Cloudinary để xoá ảnh
+                result = cloudinary.uploader.destroy(public_id)
+                if result.get("result") == "ok":
+                    deleted_cloud_count += 1
+            except Exception as e:
+                print(f"⚠️ Failed to delete image {public_id} on Cloud: {e}")
+
+    # 2. Xoá record trong MongoDB
+    col = shared_resources.db[HISTORY_COLLECTION]
+    
+    # Dùng $pull để xoá tất cả object có user_image_url nằm trong danh sách gửi lên
+    result = col.update_one(
+        {"user_id": user_id},
+        {
+            "$pull": {
+                "history": {
+                    "user_image_url": {"$in": image_urls}
+                }
+            }
+        }
+    )
+
+    return {
+        "status": "success",
+        "deleted_db_count": result.modified_count, # Số user bị ảnh hưởng (thường là 1)
+        "deleted_cloud_images": deleted_cloud_count # Số ảnh đã xoá trên Cloud
+    }
