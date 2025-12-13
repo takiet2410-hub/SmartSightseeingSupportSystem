@@ -63,71 +63,58 @@ class SummaryService:
             if count == 0:
                 continue
 
-            # --- A. CALCULATE CENTER COORDINATES (CENTROID) ---
-            lat_sum = 0.0
-            lon_sum = 0.0
-            valid_photo_count = 0
-            
-            # Get dates from first/last photo
             album_date = None
-            if photos:
-                current_ts = photos[0].get("timestamp")
-                if current_ts:
-                    # Parse timestamp if it's a string
-                    if isinstance(current_ts, str):
-                        try:
-                            album_date = datetime.fromisoformat(current_ts.replace('Z', '+00:00'))
-                        except:
-                            album_date = None
-                    else:
-                        album_date = current_ts
+            first_ts = photos[0].get("timestamp") if photos else None
 
-            # Sum coordinates from all photos
-            for p in photos:
-                p_lat = p.get("lat")
-                p_lon = p.get("lon")
-                
-                # Check valid coordinates
-                if p_lat is not None and p_lon is not None:
+            if first_ts:
+                if isinstance(first_ts, str):
                     try:
-                        lat_float = float(p_lat)
-                        lon_float = float(p_lon)
-                        
-                        # Validate coordinate ranges
-                        if self._is_valid_coordinate(lat_float, lon_float):
-                            lat_sum += lat_float
-                            lon_sum += lon_float
-                            valid_photo_count += 1
-                    except (ValueError, TypeError):
-                        continue
-            
-            final_lat = None
-            final_lon = None
+                        album_date = datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
+                    except Exception:
+                        album_date = None
+                elif isinstance(first_ts, datetime):
+                    album_date = first_ts
 
-            # If photos have GPS -> Calculate average
-            if valid_photo_count > 0:
-                final_lat = lat_sum / valid_photo_count
-                final_lon = lon_sum / valid_photo_count
-
-            # --- B. CHECK MANUAL INPUT DATA (OVERRIDE) ---
+            # --- A. MANUAL LOCATION ƯU TIÊN ---
             if title in manual_map:
                 user_input = manual_map[title]
-                user_lat = user_input.get('lat')
-                user_lon = user_input.get('lon')
-                
-                if user_lat is not None and user_lon is not None:
-                    try:
-                        user_lat_float = float(user_lat)
-                        user_lon_float = float(user_lon)
-                        
-                        if self._is_valid_coordinate(user_lat_float, user_lon_float):
-                            final_lat = user_lat_float
-                            final_lon = user_lon_float
-                    except (ValueError, TypeError):
-                        pass
-                
-                if user_input.get('name'):
-                    title = user_input.get('name')
+                user_lat = user_input.get("lat")
+                user_lon = user_input.get("lon")
+
+                try:
+                    user_lat = float(user_lat)
+                    user_lon = float(user_lon)
+                    if self._is_valid_coordinate(user_lat, user_lon):
+                        final_lat = user_lat
+                        final_lon = user_lon
+                        title = user_input.get("name", title)
+                except (TypeError, ValueError):
+                    pass
+
+            # --- B. FALLBACK GPS (NẾU KHÔNG CÓ MANUAL) ---
+            if final_lat is None:
+                lat_sum = 0.0
+                lon_sum = 0.0
+                valid_photo_count = 0
+
+                for p in photos:
+                    p_lat = p.get("lat")
+                    p_lon = p.get("lon")
+
+                    if p_lat is not None and p_lon is not None:
+                        try:
+                            p_lat = float(p_lat)
+                            p_lon = float(p_lon)
+                            if self._is_valid_coordinate(p_lat, p_lon):
+                                lat_sum += p_lat
+                                lon_sum += p_lon
+                                valid_photo_count += 1
+                        except (TypeError, ValueError):
+                            continue
+
+                if valid_photo_count > 0:
+                    final_lat = lat_sum / valid_photo_count
+                    final_lon = lon_sum / valid_photo_count
 
             # --- C. SAVE VALID POINTS ---
             if final_lat is not None and final_lon is not None:

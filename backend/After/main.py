@@ -272,6 +272,11 @@ async def create_album(
                         cover_url = p.image_url
                         break
             
+            has_gps = any(
+                p.lat is not None and p.lon is not None
+                for p in output_photos
+            )
+            
             album_out = Album(
                 id=album_id,
                 user_id=current_user_id,
@@ -280,7 +285,8 @@ async def create_album(
                 download_zip_url=zip_url,
                 cover_photo_url=cover_url,
                 photos=output_photos,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
+                needs_manual_location=not has_gps
             )
             final_albums.append(album_out)
             

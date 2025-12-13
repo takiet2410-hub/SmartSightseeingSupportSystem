@@ -36,6 +36,7 @@ class Album(BaseModel):
     cover_photo_url: Optional[str] = None
     photos: List[PhotoOutput]
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    needs_manual_location: bool = False
 
 # --- MODEL CHO TRIP SUMMARY ---
 class ManualLocationInput(BaseModel):
