@@ -111,6 +111,21 @@ def load_and_prepare_image(content: bytes) -> Tuple[Image.Image, Image.Image, by
     img_thumb.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
     return img_full, img_thumb, content, is_heic
 
+def delete_local_file(filename_or_path: str):
+    """
+    Xóa file trong thư mục uploads (nếu tồn tại)
+    """
+    try:
+        # Nếu input là đường dẫn đầy đủ hoặc chỉ tên file
+        filename = os.path.basename(filename_or_path)
+        file_path = os.path.join("uploads", filename)
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"Deleted local file: {filename}")
+    except Exception as e:
+        logger.error(f"Error deleting local file: {e}")
+
 async def process_single_photo(file: UploadFile, extractor: MetadataExtractor, lighting_filter: LightingFilter, curator: CurationService) -> Optional[PhotoInput]:
     async with semaphore:
         try:
@@ -425,20 +440,40 @@ async def delete_album(
     album_id: str,
     current_user_id: str = Depends(get_current_user_id)
 ):
-    """
-    Xóa hoàn toàn một album khỏi Database.
-    Lưu ý: Chỉ xóa record trong DB, ảnh trên Cloudinary vẫn còn (cần xử lý background nếu muốn xóa sạch).
-    """
-    # Tìm và xóa album phải khớp cả ID và Owner (người sở hữu)
-    result = album_collection.delete_one({
-        "_id": album_id,
-        "user_id": current_user_id
-    })
-
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Album không tồn tại hoặc bạn không có quyền xóa")
+    # 1. Tìm album trước để lấy danh sách ảnh
+    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
     
-    return {"message": f"Đã xóa album {album_id} thành công"}
+    if not album:
+        raise HTTPException(status_code=404, detail="Album không tồn tại")
+
+    # 2. Thu thập danh sách cần xóa
+    cloud_public_ids = []
+    
+    # Duyệt qua từng ảnh trong album
+    if "photos" in album:
+        for photo in album["photos"]:
+            img_url = photo.get("image_url")
+            
+            if img_url:
+                # A. Nếu là ảnh Cloudinary -> Lấy Public ID
+                if "cloudinary" in img_url:
+                    pid = cloud_service.get_public_id_from_url(img_url)
+                    if pid: cloud_public_ids.append(pid)
+                
+                # B. Xóa file Local (Thumbnail/Original)
+                # Dù đã up lên cloud hay chưa, file gốc vẫn có thể nằm trong folder uploads
+                delete_local_file(photo.get("filename")) 
+                # Hoặc nếu img_url là local path (/images/abc.jpg)
+                delete_local_file(img_url)
+
+    # 3. Gửi lệnh xóa lên Cloudinary (Chạy ngầm/Async cũng được)
+    if cloud_public_ids:
+        cloud_service.delete_resources(cloud_public_ids)
+
+    # 4. Xóa trong Database
+    album_collection.delete_one({"_id": album_id})
+    
+    return {"message": f"Đã xóa album {album_id} và dọn dẹp {len(cloud_public_ids)} ảnh trên cloud"}
 
 # 2. ĐỔI TÊN ALBUM
 @app.patch("/albums/{album_id}/rename")
@@ -470,22 +505,41 @@ async def delete_photo_from_album(
     photo_id: str,
     current_user_id: str = Depends(get_current_user_id)
 ):
-    """
-    Xóa một ảnh cụ thể ra khỏi mảng 'photos' của Album.
-    """
-    # Sử dụng toán tử $pull của MongoDB để xóa item trong mảng
+    # 1. Tìm album
+    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
+    if not album:
+        raise HTTPException(status_code=404, detail="Album không tìm thấy")
+    
+    # 2. Tìm ảnh trong mảng photos
+    target_photo = None
+    for p in album.get("photos", []):
+        if p.get("id") == photo_id:
+            target_photo = p
+            break
+            
+    if not target_photo:
+        raise HTTPException(404, "Ảnh không tồn tại trong album")
+
+    # 3. Xử lý xóa file vật lý
+    img_url = target_photo.get("image_url")
+    if img_url:
+        # Xóa trên Cloudinary
+        if "cloudinary" in img_url:
+            pid = cloud_service.get_public_id_from_url(img_url)
+            if pid:
+                cloud_service.delete_resources([pid]) # Xóa 1 cái
+        
+        # Xóa dưới Local
+        delete_local_file(target_photo.get("filename"))
+        delete_local_file(img_url)
+
+    # 4. Xóa khỏi Database (MongoDB $pull)
     result = album_collection.update_one(
-        {"_id": album_id, "user_id": current_user_id},
+        {"_id": album_id},
         {"$pull": {"photos": {"id": photo_id}}} 
     )
 
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Album không tìm thấy")
-    
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Ảnh không tồn tại trong album này")
-
-    return {"message": f"Đã xóa ảnh {photo_id} khỏi album"}
+    return {"message": f"Đã xóa ảnh {photo_id} vĩnh viễn"}
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
