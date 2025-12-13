@@ -49,79 +49,69 @@ class SummaryService:
 
         # 3. ITERATE THROUGH EACH ALBUM
         for album in albums:
-            title = album.get("title", "Unknown Event")
+            album_title = album.get("title", "Unknown Event")  # 🔒 KEY CỐ ĐỊNH
+            display_title = album_title                         # 👁️ TÊN HIỂN THỊ
             method = album.get("method", "")
 
-            # Skip junk albums
-            if method == "filters_rejected" or "Review Needed" in title:
+            if method == "filters_rejected" or "Review Needed" in album_title:
                 continue
 
             photos = album.get("photos", [])
-            count = len(photos)
-            total_photos += count
-
-            if count == 0:
+            total_photos += len(photos)
+            if not photos:
                 continue
 
+            # ---------- DATE ----------
             album_date = None
-            first_ts = photos[0].get("timestamp") if photos else None
-
-            if first_ts:
-                if isinstance(first_ts, str):
-                    try:
-                        album_date = datetime.fromisoformat(first_ts.replace("Z", "+00:00"))
-                    except Exception:
-                        album_date = None
-                elif isinstance(first_ts, datetime):
-                    album_date = first_ts
-
-            # --- A. MANUAL LOCATION ƯU TIÊN ---
-            if title in manual_map:
-                user_input = manual_map[title]
-                user_lat = user_input.get("lat")
-                user_lon = user_input.get("lon")
-
+            ts = photos[0].get("timestamp")
+            if ts:
                 try:
-                    user_lat = float(user_lat)
-                    user_lon = float(user_lon)
-                    if self._is_valid_coordinate(user_lat, user_lon):
-                        final_lat = user_lat
-                        final_lon = user_lon
-                        title = user_input.get("name", title)
+                    album_date = datetime.fromisoformat(ts.replace("Z", "+00:00")) if isinstance(ts, str) else ts
+                except Exception:
+                    album_date = None
+
+            final_lat = None
+            final_lon = None
+
+            # ---------- 1️⃣ MANUAL LOCATION (CHỈ MATCH BẰNG album_title) ----------
+            manual = manual_map.get(album_title)
+            if manual:
+                try:
+                    lat = float(manual.get("lat"))
+                    lon = float(manual.get("lon"))
+                    if self._is_valid_coordinate(lat, lon):
+                        final_lat = lat
+                        final_lon = lon
+                        display_title = manual.get("name", album_title)
                 except (TypeError, ValueError):
                     pass
 
-            # --- B. FALLBACK GPS (NẾU KHÔNG CÓ MANUAL) ---
+            # ---------- 2️⃣ FALLBACK GPS ----------
             if final_lat is None:
                 lat_sum = 0.0
                 lon_sum = 0.0
-                valid_photo_count = 0
+                count = 0
 
                 for p in photos:
-                    p_lat = p.get("lat")
-                    p_lon = p.get("lon")
+                    try:
+                        lat = float(p.get("lat"))
+                        lon = float(p.get("lon"))
+                        if self._is_valid_coordinate(lat, lon):
+                            lat_sum += lat
+                            lon_sum += lon
+                            count += 1
+                    except (TypeError, ValueError):
+                        continue
 
-                    if p_lat is not None and p_lon is not None:
-                        try:
-                            p_lat = float(p_lat)
-                            p_lon = float(p_lon)
-                            if self._is_valid_coordinate(p_lat, p_lon):
-                                lat_sum += p_lat
-                                lon_sum += p_lon
-                                valid_photo_count += 1
-                        except (TypeError, ValueError):
-                            continue
+                if count > 0:
+                    final_lat = lat_sum / count
+                    final_lon = lon_sum / count
 
-                if valid_photo_count > 0:
-                    final_lat = lat_sum / valid_photo_count
-                    final_lon = lon_sum / valid_photo_count
-
-            # --- C. SAVE VALID POINTS ---
+            # ---------- SAVE ----------
             if final_lat is not None and final_lon is not None:
-                if self._is_valid_coordinate(final_lat, final_lon):
-                    valid_points.append((final_lat, final_lon))
-                    timeline_names.append(title)
-                    album_dates.append(album_date)
+                valid_points.append((final_lat, final_lon))
+                timeline_names.append(display_title)
+                album_dates.append(album_date)
 
         # ✅ FIX: SORT BY DATE (OLDEST TO NEWEST)
         if album_dates and any(d is not None for d in album_dates):
