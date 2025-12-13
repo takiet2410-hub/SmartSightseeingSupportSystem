@@ -6,6 +6,7 @@ from PIL.ExifTags import TAGS
 from pillow_heif import register_heif_opener
 
 from logger_config import logger
+from pydantic import BaseModel
 
 register_heif_opener()
 
@@ -172,3 +173,6 @@ class MetadataExtractor:
         except Exception as e:
             logger.debug(f"GPS parsing failed: {e}")
             return None, None
+
+class AlbumUpdateRequest(BaseModel):
+    title: str

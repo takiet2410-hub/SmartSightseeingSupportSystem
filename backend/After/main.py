@@ -21,12 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import requests
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Body
 
 from config import TEMP_DIR, PROCESSED_DIR
 from metadata import MetadataExtractor
 from clustering.service import ClusteringService, get_model as get_clip_model
 # Import đúng các Schema mới
-from schemas import PhotoInput, PhotoOutput, Album, TripSummaryRequest, TripSummaryResponse
+from schemas import PhotoInput, PhotoOutput, Album, TripSummaryRequest, TripSummaryResponse, AlbumUpdateRequest
 from summary_service import SummaryService
 from filters.lighting import LightingFilter
 from filters.junk_detector import is_junk_batch, get_model as get_junk_model
@@ -418,6 +419,73 @@ async def get_summary_history(user_id: str = "test_runner"):
     except Exception as e:
         logger.error(f"Error fetching history: {e}")
         return []
+    
+@app.delete("/albums/{album_id}")
+async def delete_album(
+    album_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Xóa hoàn toàn một album khỏi Database.
+    Lưu ý: Chỉ xóa record trong DB, ảnh trên Cloudinary vẫn còn (cần xử lý background nếu muốn xóa sạch).
+    """
+    # Tìm và xóa album phải khớp cả ID và Owner (người sở hữu)
+    result = album_collection.delete_one({
+        "_id": album_id,
+        "user_id": current_user_id
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Album không tồn tại hoặc bạn không có quyền xóa")
+    
+    return {"message": f"Đã xóa album {album_id} thành công"}
+
+# 2. ĐỔI TÊN ALBUM
+@app.patch("/albums/{album_id}/rename")
+async def rename_album(
+    album_id: str,
+    request: AlbumUpdateRequest, # Body JSON: {"title": "Tên Mới"}
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Đổi tên Album.
+    """
+    if not request.title.strip():
+        raise HTTPException(status_code=400, detail="Tên album không được để trống")
+
+    result = album_collection.update_one(
+        {"_id": album_id, "user_id": current_user_id},
+        {"$set": {"title": request.title}} # Lệnh update của MongoDB
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Album không tìm thấy")
+
+    return {"message": "Đổi tên thành công", "new_title": request.title}
+
+# 3. XÓA 1 ẢNH KHỎI ALBUM
+@app.delete("/albums/{album_id}/photos/{photo_id}")
+async def delete_photo_from_album(
+    album_id: str,
+    photo_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Xóa một ảnh cụ thể ra khỏi mảng 'photos' của Album.
+    """
+    # Sử dụng toán tử $pull của MongoDB để xóa item trong mảng
+    result = album_collection.update_one(
+        {"_id": album_id, "user_id": current_user_id},
+        {"$pull": {"photos": {"id": photo_id}}} 
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Album không tìm thấy")
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Ảnh không tồn tại trong album này")
+
+    return {"message": f"Đã xóa ảnh {photo_id} khỏi album"}
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
