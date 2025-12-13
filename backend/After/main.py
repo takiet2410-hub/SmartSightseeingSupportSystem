@@ -540,6 +540,101 @@ async def delete_photo_from_album(
     )
 
     return {"message": f"Đã xóa ảnh {photo_id} vĩnh viễn"}
+
+# --- [SHARE ALBUM FEATURE] ---
+
+# 1. API: TẠO LINK CHIA SẺ (Chỉ chủ album mới được gọi)
+@app.post("/albums/{album_id}/share")
+async def create_share_link(
+    album_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Sinh ra một URL công khai cho album.
+    """
+    # Tìm album
+    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
+    if not album:
+        raise HTTPException(404, "Album không tìm thấy")
+    
+    # Kiểm tra xem đã có token chưa, nếu chưa thì tạo mới
+    share_token = album.get("share_token")
+    if not share_token:
+        share_token = str(uuid.uuid4()) # Sinh mã ngẫu nhiên duy nhất
+        
+        # Cập nhật vào DB
+        album_collection.update_one(
+            {"_id": album_id},
+            {
+                "$set": {
+                    "share_token": share_token,
+                    "is_public": True
+                }
+            }
+        )
+    
+    # Trả về đường dẫn (Frontend sẽ ghép thêm domain của web vào)
+    # Ví dụ Frontend sẽ hiển thị: https://my-app.com/shared/abc-xyz-123
+    return {
+        "message": "Đã tạo link chia sẻ",
+        "share_token": share_token,
+        "full_url_hint": f"/shared-albums/{share_token}"
+    }
+
+
+# 2. API: TẮT CHIA SẺ (Revoke Link)
+@app.delete("/albums/{album_id}/share")
+async def revoke_share_link(
+    album_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Hủy bỏ link chia sẻ. Người ngoài sẽ không xem được nữa.
+    """
+    result = album_collection.update_one(
+        {"_id": album_id, "user_id": current_user_id},
+        {
+            "$unset": {"share_token": ""}, # Xóa trường token
+            "$set": {"is_public": False}
+        }
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(404, "Album không tìm thấy")
+        
+    return {"message": "Đã tắt tính năng chia sẻ cho album này"}
+
+
+# 3. API: XEM ALBUM CÔNG KHAI (KHÔNG CẦN LOGIN)
+# Lưu ý: Không có 'Depends(get_current_user_id)' ở đây
+@app.get("/shared-albums/{share_token}")
+async def view_shared_album(share_token: str):
+    """
+    API dành cho người lạ (Guest). 
+    Chỉ cần có share_token là xem được ảnh.
+    """
+    # Tìm album dựa vào token và cờ is_public
+    album = album_collection.find_one({
+        "share_token": share_token,
+        "is_public": True
+    })
+    
+    if not album:
+        raise HTTPException(404, "Album không tồn tại hoặc link đã hết hạn")
+    
+    # Chuẩn hóa dữ liệu trả về (Ẩn thông tin nhạy cảm nếu cần)
+    # Ở đây ta trả về giống hệt cấu trúc Album bình thường
+    
+    # Chuyển đổi timestamp sang string nếu cần thiết cho frontend
+    photos = album.get("photos", [])
+    
+    return {
+        "title": album.get("title"),
+        "cover_photo_url": album.get("cover_photo_url"),
+        "download_zip_url": album.get("download_zip_url"),
+        "photos": photos,
+        "owner_id": album.get("user_id") # (Tùy chọn) Cho biết ai là chủ
+    }
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
