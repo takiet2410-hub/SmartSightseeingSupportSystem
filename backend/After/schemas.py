@@ -58,3 +58,6 @@ class TripSummaryResponse(BaseModel):
     end_date: str
     map_image_url: str
     timeline: List[str]
+
+class AlbumUpdateRequest(BaseModel):
+    title: str
