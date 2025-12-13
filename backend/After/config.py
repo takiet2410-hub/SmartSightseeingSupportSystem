@@ -12,8 +12,6 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 PROCESSED_DIR = os.getenv("PROCESSED_DIR", os.path.join(tempfile.gettempdir(), "smart-album-processed"))
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
-
 GOONG_API_KEY = os.getenv("GOONG_API_KEY")
 
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
