@@ -70,8 +70,8 @@ class SummaryService:
                 except Exception:
                     album_date = None
 
-            final_lat = None
-            final_lon = None
+            final_lat: float | None = None
+            final_lon: float | None = None
 
             # ---------- 1️⃣ MANUAL LOCATION (CHỈ MATCH BẰNG album_title) ----------
             manual = manual_map.get(album_title)
