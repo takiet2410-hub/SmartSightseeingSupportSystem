@@ -40,7 +40,7 @@ class Album(BaseModel):
 
 # --- MODEL CHO TRIP SUMMARY ---
 class ManualLocationInput(BaseModel):
-    album_title: str
+    album_id: str
     name: str
     lat: float
     lon: float

@@ -36,7 +36,11 @@ class SummaryService:
             return self._empty_result()
 
         # 2. Map manual location data (Key = album_title)
-        manual_map = {m['album_title']: m for m in manual_locations}
+        manual_map = {
+            m["album_id"]: m
+            for m in manual_locations
+            if "album_id" in m
+        }
 
         valid_points = []   # Points to plot on map
         timeline_names = [] # Location names
@@ -49,8 +53,9 @@ class SummaryService:
 
         # 3. ITERATE THROUGH EACH ALBUM
         for album in albums:
-            album_title = album.get("title", "Unknown Event")  # 🔒 KEY CỐ ĐỊNH
-            display_title = album_title                         # 👁️ TÊN HIỂN THỊ
+            album_id = album.get("id")                     # 🔑 KEY DUY NHẤT
+            album_title = album.get("title", "Unknown")
+            display_title = album_title
             method = album.get("method", "")
 
             if method == "filters_rejected" or "Review Needed" in album_title:
@@ -70,11 +75,11 @@ class SummaryService:
                 except Exception:
                     album_date = None
 
-            final_lat: float | None = None
-            final_lon: float | None = None
+            final_lat = None
+            final_lon = None
 
-            # ---------- 1️⃣ MANUAL LOCATION (CHỈ MATCH BẰNG album_title) ----------
-            manual = manual_map.get(album_title)
+            # ---------- 1️⃣ MANUAL LOCATION (MATCH BẰNG album_id) ----------
+            manual = manual_map.get(album_id)
             if manual:
                 try:
                     lat = float(manual.get("lat"))
