@@ -58,10 +58,17 @@ def has_camera_model(image_path: str) -> bool:
         
         # Check for Camera Model (Tag 272 = Model, Tag 271 = Make)
         # A real photo should have at least one of these
-        has_model = exif_data.get(272) is not None  # Model
-        has_make = exif_data.get(271) is not None   # Make
+        make = exif_data.get(271)
+        model = exif_data.get(272)
+
+        def is_valid(value):
+            return (
+                isinstance(value, str) and
+                value.strip() and
+                value.strip().lower() not in ['unknown', 'n/a', 'none']
+            )
         
-        return has_model or has_make
+        return is_valid(model) or is_valid(make)
         
     except Exception as e:
         logger.warning(f"Failed to check camera model for {image_path}: {e}")
