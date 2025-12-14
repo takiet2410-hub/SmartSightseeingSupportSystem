@@ -21,7 +21,11 @@ def get_current_user_id(token: Optional[HTTPAuthorizationCredentials] = Depends(
         jwt_token = token.credentials 
 
         # 3. Decode token (Tạm thời bỏ verify signature như logic cũ)
-        payload = jwt.decode(jwt_token, options={"verify_signature": False})
+        payload = jwt.decode(
+            jwt_token,
+            key=JWT_SECRET_KEY,        # Chìa khóa bí mật (chỉ Backend biết)
+            algorithms=[JWT_ALGORITHM] # Thuật toán mã hóa (ví dụ HS256)
+        )
 
         user_id = payload.get("sub") or payload.get("user_id")
 
