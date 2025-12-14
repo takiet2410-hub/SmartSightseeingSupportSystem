@@ -32,7 +32,7 @@ class ClusteringService:
 
             if has_gps and has_time:
                 # Best case: GPS + Time
-                albums = run_spatiotemporal(clean_photos, dist_m=700, gap_min=240)
+                albums = run_spatiotemporal(clean_photos, dist_m=700, gap_min=120)
             elif has_time:
                 # Good case: Time only
                 albums = run_jenks_time(clean_photos)
