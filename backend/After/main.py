@@ -99,17 +99,25 @@ def compute_image_hash(content: bytes) -> str:
 def process_image_job(file_info: dict) -> dict:
     """
     🚀 FIXED: Runs inside the thread pool. 
-    Opens image, generates thumb, and runs analysis here to avoid blocking main thread.
+    Opens image, generates thumb, and runs analysis.
+    FIX 2.0: Extracts metadata from ORIGINAL image, not thumbnail.
     """
     path = file_info['temp_path']
     filename = file_info['filename']
     
     try:
+        # 1. Open Image (Heavy I/O)
         img = Image.open(path)
+        
+        # 2. Thumbnail (Heavy CPU)
         img_thumb = img.copy()
         img_thumb.thumbnail((512, 512), Image.Resampling.BILINEAR)
         
-        metadata = _extractor.get_metadata_from_image(img_thumb)
+        # 3. Analyze
+        # 🚀 FIX: Extract metadata from the ORIGINAL image (img), not the thumbnail
+        metadata = _extractor.get_metadata_from_image(img)
+        
+        # Lighting & Score still use thumbnail (Faster & Accurate enough)
         is_good_light, light_reason = _lighting_filter.analyze_from_image(img_thumb)
         score = 0.0
         if is_good_light:
@@ -380,10 +388,6 @@ async def create_album(
         import traceback
         traceback.print_exc()
         raise HTTPException(500, detail=str(e))
-
-# ==========================================
-# 🔽 ALL FRIEND'S FEATURES (RESTORED) 🔽
-# ==========================================
 
 @app.get("/health")
 async def health_check():

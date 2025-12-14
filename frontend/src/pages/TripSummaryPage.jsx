@@ -17,7 +17,7 @@ function TripSummaryPage() {
   const [useInteractiveMap, setUseInteractiveMap] = useState(true);
   
   const wsRef = useRef(null);
-  const USER_ID = "6933ecb10ef6129e479b90df";
+  const USER_ID = "69353ecd317c801a5b54474c";
   
   // Backend URL - Change this if your backend is on a different port
   const BACKEND_URL = "http://localhost:8000";
