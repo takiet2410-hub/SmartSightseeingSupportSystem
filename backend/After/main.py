@@ -13,6 +13,7 @@ from typing import List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
+from bson import ObjectId
 
 from PIL import Image
 import uvicorn
@@ -641,6 +642,31 @@ async def view_shared_album(share_token: str):
         "photos": photos,
         "owner_id": album.get("user_id") # (Tùy chọn) Cho biết ai là chủ
     }
+
+@app.delete("/summary/{summary_id}")
+async def delete_trip_summary(
+    summary_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    try:
+        result = summary_collection.delete_one({
+            "_id": ObjectId(summary_id),
+            "user_id": current_user_id
+        })
+
+        if result.deleted_count == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Trip summary không tồn tại hoặc không có quyền xóa"
+            )
+
+        return {
+            "message": "Đã xóa trip summary",
+            "summary_id": summary_id
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
