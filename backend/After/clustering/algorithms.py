@@ -10,27 +10,77 @@ from sklearn.cluster import DBSCAN
 
 from schemas import PhotoInput, PhotoOutput, Album
 from logger_config import logger
+import math
+
 
 EARTH_RADIUS_KM = 6371.0088
 
 geolocator = Nominatim(user_agent="smart_tourism_app_v1")
 
+def geographic_center(lats, lons):
+    """
+    Compute proper geographic centroid
+    """
+    x = y = z = 0.0
+
+    for lat, lon in zip(lats, lons):
+        lat = math.radians(lat)
+        lon = math.radians(lon)
+        x += math.cos(lat) * math.cos(lon)
+        y += math.cos(lat) * math.sin(lon)
+        z += math.sin(lat)
+
+    total = len(lats)
+    x /= total
+    y /= total
+    z /= total
+
+    lon = math.atan2(y, x)
+    hyp = math.sqrt(x * x + y * y)
+    lat = math.atan2(z, hyp)
+
+    return math.degrees(lat), math.degrees(lon)
+
 def get_location_name(lat: float, lon: float) -> str:
     try:
-        # Get address details in Vietnamese
-        location = geolocator.reverse((lat, lon), language='vi', zoom=10, timeout=5)
+        if lat is None or lon is None:
+            return "Unknown Location"
+
+        location = geolocator.reverse(
+            (lat, lon),
+            language="vi",
+            exactly_one=True,
+            zoom=18,
+            timeout=10
+        )
+
         if not location:
             return "Unknown Location"
-        
-        address = location.raw.get('address', {})
-        
-        # Prioritize City -> Province -> State -> Town
-        city = address.get('city') or address.get('province') or address.get('state') or address.get('town')
-        
-        return city if city else "Unknown Location"
+
+        address = location.raw.get("address", {})
+
+        district = (
+            address.get("city_district")
+            or address.get("suburb")
+            or address.get("borough")
+            or address.get("city")
+        )
+
+        state = address.get("state") or address.get("province")
+
+        if district and state:
+            return f"{district}, {state}"
+        return state or district or "Unknown Location"
+
+    except GeocoderTimedOut:
+        logger.warning("Geocoder timeout")
+        return "Unknown Location"
+
     except Exception as e:
         logger.warning(f"Geocoding failed: {e}")
         return "Unknown Location"
+
+
 
 # --- 1. GPS + TIME: ST-DBSCAN ---
 def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> List[Album]:
@@ -94,8 +144,7 @@ def run_spatiotemporal(photos: List[PhotoInput], dist_m: int, gap_min: int) -> L
 
             location_title = "Event"
             if lats and lons:
-                center_lat = sum(lats) / len(lats)
-                center_lon = sum(lons) / len(lons)
+                center_lat, center_lon = geographic_center(lats, lons)
                 place_name = get_location_name(center_lat, center_lon)
                 if place_name != "Unknown Location":
                     location_title = place_name
@@ -183,8 +232,7 @@ def run_location_hdbscan(photos: List[PhotoInput], min_cluster_size: int = 3) ->
         location_title = f"Location Cluster #{label}"
 
         if lats and lons:
-            center_lat = sum(lats) / len(lats)
-            center_lon = sum(lons) / len(lons)
+            center_lat, center_lon = geographic_center(lats, lons)
             place_name = get_location_name(center_lat, center_lon)
             if place_name != "Unknown Location":
                 location_title = place_name

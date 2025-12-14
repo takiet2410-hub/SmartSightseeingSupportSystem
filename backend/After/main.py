@@ -22,11 +22,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import requests
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Body
 
 from config import TEMP_DIR, PROCESSED_DIR
 from metadata import MetadataExtractor
+# MERGED IMPORTS: Kept ClusteringService, added AlbumUpdateRequest from friend
 from clustering.service import ClusteringService
-from schemas import PhotoInput, PhotoOutput, Album, TripSummaryRequest, TripSummaryResponse
+from schemas import PhotoInput, PhotoOutput, Album, TripSummaryRequest, TripSummaryResponse, AlbumUpdateRequest
 from summary_service import SummaryService
 from filters.lighting import LightingFilter
 from filters.junk_detector import is_junk_batch, get_model as get_junk_model
@@ -45,6 +47,7 @@ manager = ConnectionManager()
 _extractor = None
 _lighting_filter = None
 _curator = None
+summary_service = SummaryService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -74,14 +77,13 @@ app.add_middleware(
 
 app.mount("/images", StaticFiles(directory=PROCESSED_DIR), name="images")
 
-# 🚀 Use ONE shared executor for the app to prevent thread explosion
+# 🚀 YOUR OPTIMIZATION: Use 8 workers to prevent thread explosion
 executor = ThreadPoolExecutor(max_workers=8)
 
 MAX_FILES = 500
 
 def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes = None):
     try:
-        # If we have original bytes, write them directly (fastest)
         if original_bytes:
             with open(path, 'wb') as f:
                 f.write(original_bytes)
@@ -93,6 +95,7 @@ def save_image_to_disk(img_full: Image.Image, path: str, original_bytes: bytes =
 def compute_image_hash(content: bytes) -> str:
     return hashlib.md5(content).hexdigest()
 
+# 🔽 YOUR OPTIMIZED WORKER FUNCTION (KEPT TO FIX FREEZING) 🔽
 def process_image_job(file_info: dict) -> dict:
     """
     🚀 FIXED: Runs inside the thread pool. 
@@ -102,15 +105,10 @@ def process_image_job(file_info: dict) -> dict:
     filename = file_info['filename']
     
     try:
-        # 1. Open Image (Heavy I/O)
         img = Image.open(path)
-        
-        # 2. Thumbnail (Heavy CPU)
         img_thumb = img.copy()
         img_thumb.thumbnail((512, 512), Image.Resampling.BILINEAR)
         
-        # 3. Analyze (Heavy CPU/ML)
-        # Access globals since this is a thread, not a separate process
         metadata = _extractor.get_metadata_from_image(img_thumb)
         is_good_light, light_reason = _lighting_filter.analyze_from_image(img_thumb)
         score = 0.0
@@ -135,6 +133,16 @@ def process_image_job(file_info: dict) -> dict:
             'error': str(e)
         }
 
+# 🔽 FRIEND'S HELPER (KEPT FOR DELETION FEATURES) 🔽
+def delete_local_file(filename_or_path: str):
+    try:
+        filename = os.path.basename(filename_or_path)
+        file_path = os.path.join(PROCESSED_DIR, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+
 @app.post("/create-album")
 async def create_album(
     files: List[UploadFile] = File(...),
@@ -150,7 +158,9 @@ async def create_album(
     # STEP 0: Save all files to disk (Essential I/O)
     logger.info("💾 Saving files to disk...")
     file_contents = []
-    save_tasks = []
+    
+    saved_paths_map = {}
+    save_futures = []
     
     for file in files:
         content = await file.read()
@@ -158,42 +168,8 @@ async def create_album(
         
         safe_name = f"{uuid.uuid4()}.jpg"
         temp_path = os.path.join(PROCESSED_DIR, safe_name)
+        saved_paths_map[file.filename] = temp_path
         
-        # We perform the disk write in executor to keep event loop free
-        save_tasks.append(
-            loop.run_in_executor(executor, save_image_to_disk, None, temp_path, content)
-        )
-        
-    await asyncio.gather(*save_tasks)
-    
-    # Reconstruct path map based on order (since we appended synchronously to file_contents)
-    # Note: We need to know which path belongs to which file. 
-    # Let's rebuild the paths deterministically or track them better.
-    # Simpler approach:
-    path_map = {}
-    files_to_upload = []
-    
-    # We must match the saved paths to the filenames. 
-    # Since save_tasks mapped 1:1 to file_contents, we can regenerate the paths used.
-    # (The previous uuid logic was inside the loop, we need to capture it. Let's fix that logic slightly).
-    
-    prepared_files = []
-    for idx, (filename, content) in enumerate(file_contents):
-        # We need to recreate the path logic or capture it. 
-        # Since I can't see the exact uuid generated inside the loop above without refactoring,
-        # I will assume we can rely on the task order or refactor slightly.
-        # FIX: Let's just grab the filename from the PROCESSED_DIR if needed, 
-        # BUT cleaner is to generate path BEFORE submit.
-        pass 
-    
-    # 🔄 RE-IMPLEMENTING STEP 0 CLEANER FOR SAFETY
-    saved_paths_map = {}
-    save_futures = []
-    
-    for filename, content in file_contents:
-        safe_name = f"{uuid.uuid4()}.jpg"
-        temp_path = os.path.join(PROCESSED_DIR, safe_name)
-        saved_paths_map[filename] = temp_path
         save_futures.append(
             loop.run_in_executor(executor, save_image_to_disk, None, temp_path, content)
         )
@@ -243,7 +219,7 @@ async def create_album(
     for i in range(0, len(jobs), BATCH_SIZE):
         batch = jobs[i:i+BATCH_SIZE]
         
-        # 🚀 CRITICAL FIX: Run image loading & analysis in executor
+        # 🚀 YOUR FIX: Run image loading & analysis in executor
         results = await loop.run_in_executor(
             executor,
             lambda b: [process_image_job(j) for j in b],
@@ -252,7 +228,6 @@ async def create_album(
         
         for res in results:
             if not res['success']:
-                # Handle error case
                 processed_inputs.append(PhotoInput(
                      id=res['filename'], filename=res['filename'],
                      local_path=res.get('temp_path'), is_rejected=True, 
@@ -260,7 +235,6 @@ async def create_album(
                 ))
                 continue
 
-            # Create PhotoInput
             if not res['is_good_light']:
                 p_in = PhotoInput(
                     id=res['filename'], filename=res['filename'],
@@ -275,14 +249,12 @@ async def create_album(
                     score=res['score'],
                     **res['metadata']
                 )
-                
-            # Update Cache
+            
             _processed_cache[res['img_hash']] = p_in
             processed_inputs.append(p_in)
             
-    # Merge cached and new
     all_inputs = processed_inputs + cached_results
-    valid_inputs = [p for p in all_inputs if p] # Simple filter
+    valid_inputs = [p for p in all_inputs if p]
     
     # STEP 3: Junk Detection
     clean_photos = [p for p in valid_inputs if not p.is_rejected]
@@ -304,7 +276,6 @@ async def create_album(
         # STEP 5: Wait for Uploads
         logger.info("⏳ Waiting for Cloudinary upload...")
         uploaded_map = await upload_task
-        # uploaded_map format: { 'local_path': {'url': '...', 'public_id': '...'} }
         
         logger.info(f"✅ Cloudinary upload complete. Items: {len(uploaded_map)}")
         
@@ -317,7 +288,7 @@ async def create_album(
             safe_tag = "".join(c for c in album.title if c.isalnum() or c in ('-', '_')) + f"_{uuid.uuid4().hex[:4]}"
             
             output_photos = []
-            album_public_ids = [] # Store IDs for tagging
+            album_public_ids = [] 
             has_cloud_photo = False
             
             for photo in album.photos:
@@ -326,7 +297,6 @@ async def create_album(
                 
                 img_url = None
                 
-                # Check upload result
                 if orig.local_path in uploaded_map:
                     data = uploaded_map[orig.local_path]
                     img_url = data.get("url")
@@ -335,7 +305,6 @@ async def create_album(
                         album_public_ids.append(pid)
                     has_cloud_photo = True
                 elif orig.local_path:
-                    # Fallback to local server URL if upload failed
                     img_url = f"/images/{os.path.basename(orig.local_path)}"
                 
                 p_out = PhotoOutput(
@@ -349,11 +318,10 @@ async def create_album(
                 )
                 output_photos.append(p_out)
             
-            # 🚀 FIXED ZIP LOGIC:
+            # 🚀 FIXED ZIP LOGIC (USING HIS DYNAMIC LINK + YOUR TAG FIX)
             zip_url = None
             if has_cloud_photo and album_public_ids:
-                # A. Apply the specific album tag to these photos on Cloudinary
-                # Use executor to avoid blocking loop (though it's fast IO)
+                # A. Apply the specific album tag
                 await loop.run_in_executor(
                     executor, 
                     cloud_service.add_tags, 
@@ -361,21 +329,21 @@ async def create_album(
                     safe_tag
                 )
                 
-                # B. Generate Zip from that tag
-                # (Can also run in executor)
+                # B. Generate Dynamic Zip Link (His Feature)
                 zip_url = await loop.run_in_executor(
                     executor,
                     cloud_service.create_album_zip_link,
-                    safe_tag
+                    safe_tag 
                 )
             
-            # Find cover photo
             cover_url = None
             for photo in output_photos:
                 if photo.image_url and 'cloudinary' in photo.image_url:
                     cover_url = photo.image_url
                     break
             
+            has_gps = any(p.lat is not None and p.lon is not None for p in output_photos)
+
             album_out = Album(
                 id=album_id,
                 user_id=current_user_id,
@@ -384,7 +352,8 @@ async def create_album(
                 download_zip_url=zip_url,
                 cover_photo_url=cover_url,
                 photos=output_photos,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
+                # needs_manual_location=not has_gps # Uncomment if your schema supports this
             )
             final_albums.append(album_out)
             
@@ -394,7 +363,8 @@ async def create_album(
         
         if db_inserts:
             album_collection.insert_many(db_inserts)
-
+        
+        # 🚀 YOUR CLEANUP LOGIC
         logger.info("🧹 Cleaning up local temp files...")
         for file_path in saved_paths_map.values():
             try:
@@ -411,7 +381,9 @@ async def create_album(
         traceback.print_exc()
         raise HTTPException(500, detail=str(e))
 
-# ... (Rest of your endpoints like get_my_albums, etc. remain unchanged) ...
+# ==========================================
+# 🔽 ALL FRIEND'S FEATURES (RESTORED) 🔽
+# ==========================================
 
 @app.get("/health")
 async def health_check():
@@ -420,15 +392,15 @@ async def health_check():
 @app.delete("/cleanup")
 async def cleanup_images():
     _processed_cache.clear()
-
     files = glob.glob(os.path.join(PROCESSED_DIR, "*"))
+    count = 0
     for f in files:
         try:
             os.remove(f)
+            count += 1
         except Exception:
             pass
-
-    return {"status": "cleaned", "disk_files_removed": len(files)}
+    return {"status": "cleaned", "disk_files_removed": count}
 
 @app.post("/swagger-login")
 async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -440,6 +412,125 @@ async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     except Exception:
         raise HTTPException(503, "Auth Service Unavailable")
 
+# --- DELETE ALBUM ---
+@app.delete("/albums/{album_id}")
+async def delete_album(album_id: str, current_user_id: str = Depends(get_current_user_id)):
+    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
+    if not album: raise HTTPException(404, "Album not found")
+    
+    cloud_pids = []
+    if "photos" in album:
+        for p in album["photos"]:
+            if p.get("image_url") and "cloudinary" in p["image_url"]:
+                pid = cloud_service.get_public_id_from_url(p["image_url"])
+                if pid: cloud_pids.append(pid)
+            
+            # Helper to delete local backup if exists
+            delete_local_file(p.get("filename"))
+    
+    if cloud_pids:
+        cloud_service.delete_resources(cloud_pids)
+    
+    album_collection.delete_one({"_id": album_id})
+    return {"message": "Album deleted"}
+
+# --- RENAME ALBUM ---
+@app.patch("/albums/{album_id}/rename")
+async def rename_album(album_id: str, request: AlbumUpdateRequest, current_user_id: str = Depends(get_current_user_id)):
+    if not request.title.strip(): raise HTTPException(400, "Title empty")
+    res = album_collection.update_one(
+        {"_id": album_id, "user_id": current_user_id},
+        {"$set": {"title": request.title}}
+    )
+    if res.matched_count == 0: raise HTTPException(404, "Album not found")
+    return {"message": "Renamed", "new_title": request.title}
+
+# --- DELETE PHOTO FROM ALBUM (RESTORED) ---
+@app.delete("/albums/{album_id}/photos/{photo_id}")
+async def delete_photo_from_album(album_id: str, photo_id: str, current_user_id: str = Depends(get_current_user_id)):
+    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
+    if not album: raise HTTPException(404, "Album not found")
+    
+    target_photo = next((p for p in album.get("photos", []) if p.get("id") == photo_id), None)
+    if not target_photo: raise HTTPException(404, "Photo not found")
+
+    if target_photo.get("image_url") and "cloudinary" in target_photo["image_url"]:
+        pid = cloud_service.get_public_id_from_url(target_photo["image_url"])
+        if pid: cloud_service.delete_resources([pid])
+    
+    delete_local_file(target_photo.get("filename"))
+    
+    album_collection.update_one({"_id": album_id}, {"$pull": {"photos": {"id": photo_id}}})
+    return {"message": "Photo deleted"}
+
+# --- SHARE ALBUM FEATURES ---
+@app.post("/albums/{album_id}/share")
+async def create_share_link(album_id: str, current_user_id: str = Depends(get_current_user_id)):
+    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
+    if not album: raise HTTPException(404, "Album not found")
+    
+    token = album.get("share_token") or str(uuid.uuid4())
+    album_collection.update_one({"_id": album_id}, {"$set": {"share_token": token, "is_public": True}})
+    return {"message": "Link created", "share_token": token, "full_url_hint": f"/shared-albums/{token}"}
+
+@app.delete("/albums/{album_id}/share")
+async def revoke_share_link(album_id: str, current_user_id: str = Depends(get_current_user_id)):
+    res = album_collection.update_one(
+        {"_id": album_id, "user_id": current_user_id},
+        {"$unset": {"share_token": ""}, "$set": {"is_public": False}}
+    )
+    if res.matched_count == 0: raise HTTPException(404, "Album not found")
+    return {"message": "Share link revoked"}
+
+@app.get("/shared-albums/{share_token}")
+async def view_shared_album(share_token: str):
+    album = album_collection.find_one({"share_token": share_token, "is_public": True})
+    if not album: raise HTTPException(404, "Album not found or link expired")
+    return {
+        "title": album.get("title"),
+        "cover_photo_url": album.get("cover_photo_url"),
+        "download_zip_url": album.get("download_zip_url"),
+        "photos": album.get("photos", [])
+    }
+
+# --- SUMMARY FEATURES ---
+@app.post("/trip-summary")
+async def generate_trip_summary(
+    request: TripSummaryRequest,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    try:
+        manual_locs = []
+        if request.manual_locations:
+            for loc in request.manual_locations:
+                if isinstance(loc, dict): manual_locs.append(loc)
+                elif hasattr(loc, 'dict'): manual_locs.append(loc.dict())
+
+        result = summary_service.generate_summary(request.album_data, manual_locs)
+        
+        summary_doc = dict(result) if isinstance(result, dict) else result
+        summary_doc["created_at"] = datetime.utcnow()
+        summary_doc["user_id"] = current_user_id
+        
+        try:
+            summary_collection.insert_one(summary_doc)
+        except Exception as e:
+            logger.error(f"DB Error: {e}")
+            
+        return result
+    except Exception as e:
+        logger.error(f"Summary Error: {e}")
+        raise HTTPException(500, str(e))
+
+@app.get("/summary/history")
+async def get_summary_history(user_id: str = "test_runner"):
+    try:
+        cursor = summary_collection.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1)
+        return list(cursor)
+    except Exception as e:
+        logger.error(f"Error fetching history: {e}")
+        return []
+
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await manager.connect(websocket, user_id)
@@ -447,6 +538,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         while True: await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
-        
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,6 +1,8 @@
+import time
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+import cloudinary.utils
 from concurrent.futures import ThreadPoolExecutor
 from config import CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 from logger_config import logger
@@ -13,7 +15,7 @@ cloudinary.config(
 
 class CloudinaryService:
     def __init__(self):
-        # 🚀 OPTIMIZATION: Use 4-8 workers. 16 is too many for Python's GIL + Image processing.
+        # 🚀 YOURS: Use 8 workers (Stable)
         self.executor = ThreadPoolExecutor(max_workers=8)
 
     def upload_photo(self, file_path: str, temp_tag: str) -> dict:
@@ -25,6 +27,7 @@ class CloudinaryService:
                 tags=[temp_tag],
                 resource_type="image"
             )
+            # 🚀 YOURS: Return public_id (Critical for tagging)
             return {
                 "url": response.get("secure_url"),
                 "public_id": response.get("public_id")
@@ -35,35 +38,46 @@ class CloudinaryService:
 
     def add_tags(self, public_ids: list, new_tag: str):
         """
-        🚀 NEW: Assign the specific album tag to a list of photos
-        so the Zip file generation works correctly.
+        🚀 YOURS: Apply the tag so the Zip finds the photos
         """
         try:
             if not public_ids:
                 return
-            # Cloudinary allows updating tags for multiple IDs at once
             cloudinary.uploader.add_tag(new_tag, public_ids)
             logger.info(f"🏷️ Added tag '{new_tag}' to {len(public_ids)} photos")
         except Exception as e:
             logger.error(f"❌ Failed to add tags: {e}")
 
     def create_album_zip_link(self, album_tag: str) -> str:
+        """
+        ✅ HIS FEATURE (RESTORED): Dynamic Link Generation
+        Changed input from 'album_name' to 'album_tag' so it matches the UUID tag we created.
+        """
         try:
-            logger.info(f"📦 Generating zip for tag: {album_tag}")
-            response = cloudinary.uploader.create_archive(
+            # Expiration: Now + 1 hour
+            expiration_time = int(time.time()) + 3600
+            
+            # Generate Dynamic URL (No storage used!)
+            url = cloudinary.utils.download_zip_url(
                 tags=[album_tag],
-                mode="create", 
-                target_public_id=f"{album_tag}_download",
-                resource_type="image"
+                resource_type="image",
+                auth_token={
+                    'key': CLOUDINARY_API_SECRET,
+                    'start_time': int(time.time()), 
+                    'expiration': expiration_time
+                }
             )
-            return response.get("secure_url")
+            
+            logger.info(f"✅ Generated Dynamic Zip Link for tag: {album_tag}")
+            return url
+            
         except Exception as e:
-            logger.error(f"❌ Zip Failed: {e}")
+            logger.error(f"❌ Zip Link Generation Failed: {e}")
             return None
             
     def upload_batch(self, photos_with_tags: list) -> dict:
         """
-        Uploads photos in parallel and returns a map of local_path -> {url, public_id}
+        🚀 YOURS: Parallel upload returning public_ids
         """
         total = len(photos_with_tags)
         logger.info(f"☁️ Uploading {total} photos to Cloudinary...")
@@ -77,12 +91,30 @@ class CloudinaryService:
         
         completed = 0
         for future, path in futures:
-            data = future.result() # Wait for result
+            data = future.result()
             if data:
-                results[path] = data # Store the whole dict (url + public_id)
+                results[path] = data
             completed += 1
             
             if completed % max(1, total // 5) == 0:
                 logger.info(f"📤 Upload progress: {completed}/{total}")
         
         return results
+
+    # 🔽 HIS HELPER METHODS (KEPT) 🔽
+    
+    def get_public_id_from_url(self, url: str) -> str:
+        try:
+            if "cloudinary" not in url: return None
+            parts = url.split("/upload/")
+            if len(parts) < 2: return None
+            path_part = parts[1]
+            if path_part.startswith("v"):
+                path_part = path_part.split("/", 1)[1]
+            return path_part.rsplit(".", 1)[0]
+        except Exception:
+            return None
+
+    def delete_resources(self, public_ids: list):
+        if not public_ids: return
+        self.executor.submit(cloudinary.api.delete_resources, public_ids)

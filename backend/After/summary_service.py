@@ -49,92 +49,69 @@ class SummaryService:
 
         # 3. ITERATE THROUGH EACH ALBUM
         for album in albums:
-            title = album.get("title", "Unknown Event")
+            album_title = album.get("title", "Unknown Event")  # 🔒 KEY CỐ ĐỊNH
+            display_title = album_title                         # 👁️ TÊN HIỂN THỊ
             method = album.get("method", "")
 
-            # Skip junk albums
-            if method == "filters_rejected" or "Review Needed" in title:
+            if method == "filters_rejected" or "Review Needed" in album_title:
                 continue
 
             photos = album.get("photos", [])
-            count = len(photos)
-            total_photos += count
-
-            if count == 0:
+            total_photos += len(photos)
+            if not photos:
                 continue
 
-            # --- A. CALCULATE CENTER COORDINATES (CENTROID) ---
-            lat_sum = 0.0
-            lon_sum = 0.0
-            valid_photo_count = 0
-            
-            # Get dates from first/last photo
+            # ---------- DATE ----------
             album_date = None
-            if photos:
-                current_ts = photos[0].get("timestamp")
-                if current_ts:
-                    # Parse timestamp if it's a string
-                    if isinstance(current_ts, str):
-                        try:
-                            album_date = datetime.fromisoformat(current_ts.replace('Z', '+00:00'))
-                        except:
-                            album_date = None
-                    else:
-                        album_date = current_ts
+            ts = photos[0].get("timestamp")
+            if ts:
+                try:
+                    album_date = datetime.fromisoformat(ts.replace("Z", "+00:00")) if isinstance(ts, str) else ts
+                except Exception:
+                    album_date = None
 
-            # Sum coordinates from all photos
-            for p in photos:
-                p_lat = p.get("lat")
-                p_lon = p.get("lon")
-                
-                # Check valid coordinates
-                if p_lat is not None and p_lon is not None:
+            final_lat: float | None = None
+            final_lon: float | None = None
+
+            # ---------- 1️⃣ MANUAL LOCATION (CHỈ MATCH BẰNG album_title) ----------
+            manual = manual_map.get(album_title)
+            if manual:
+                try:
+                    lat = float(manual.get("lat"))
+                    lon = float(manual.get("lon"))
+                    if self._is_valid_coordinate(lat, lon):
+                        final_lat = lat
+                        final_lon = lon
+                        display_title = manual.get("name", album_title)
+                except (TypeError, ValueError):
+                    pass
+
+            # ---------- 2️⃣ FALLBACK GPS ----------
+            if final_lat is None:
+                lat_sum = 0.0
+                lon_sum = 0.0
+                count = 0
+
+                for p in photos:
                     try:
-                        lat_float = float(p_lat)
-                        lon_float = float(p_lon)
-                        
-                        # Validate coordinate ranges
-                        if self._is_valid_coordinate(lat_float, lon_float):
-                            lat_sum += lat_float
-                            lon_sum += lon_float
-                            valid_photo_count += 1
-                    except (ValueError, TypeError):
+                        lat = float(p.get("lat"))
+                        lon = float(p.get("lon"))
+                        if self._is_valid_coordinate(lat, lon):
+                            lat_sum += lat
+                            lon_sum += lon
+                            count += 1
+                    except (TypeError, ValueError):
                         continue
-            
-            final_lat = None
-            final_lon = None
 
-            # If photos have GPS -> Calculate average
-            if valid_photo_count > 0:
-                final_lat = lat_sum / valid_photo_count
-                final_lon = lon_sum / valid_photo_count
+                if count > 0:
+                    final_lat = lat_sum / count
+                    final_lon = lon_sum / count
 
-            # --- B. CHECK MANUAL INPUT DATA (OVERRIDE) ---
-            if title in manual_map:
-                user_input = manual_map[title]
-                user_lat = user_input.get('lat')
-                user_lon = user_input.get('lon')
-                
-                if user_lat is not None and user_lon is not None:
-                    try:
-                        user_lat_float = float(user_lat)
-                        user_lon_float = float(user_lon)
-                        
-                        if self._is_valid_coordinate(user_lat_float, user_lon_float):
-                            final_lat = user_lat_float
-                            final_lon = user_lon_float
-                    except (ValueError, TypeError):
-                        pass
-                
-                if user_input.get('name'):
-                    title = user_input.get('name')
-
-            # --- C. SAVE VALID POINTS ---
+            # ---------- SAVE ----------
             if final_lat is not None and final_lon is not None:
-                if self._is_valid_coordinate(final_lat, final_lon):
-                    valid_points.append((final_lat, final_lon))
-                    timeline_names.append(title)
-                    album_dates.append(album_date)
+                valid_points.append((final_lat, final_lon))
+                timeline_names.append(display_title)
+                album_dates.append(album_date)
 
         # ✅ FIX: SORT BY DATE (OLDEST TO NEWEST)
         if album_dates and any(d is not None for d in album_dates):
