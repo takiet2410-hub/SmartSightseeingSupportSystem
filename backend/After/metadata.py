@@ -163,11 +163,6 @@ class MetadataExtractor:
             if lon_ref == "W":
                 lon = -lon
 
-            # 🔒 Safety guard (Vietnam bounds)
-            if not (8 <= lat <= 12 and 104 <= lon <= 109):
-                logger.warning(f"GPS out of VN bounds: {lat}, {lon}")
-                return None, None
-
             return lat, lon
 
         except Exception as e:
