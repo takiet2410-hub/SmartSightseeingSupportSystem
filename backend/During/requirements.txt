@@ -24,3 +24,7 @@ scikit-learn
 pyjwt
 
 cloudinary
+
+#For unittest
+pytest
+coverge
