@@ -15,41 +15,6 @@ Welcome to the **Smart Sightseeing Support System**. This project utilizes a **M
 
 ---
 
-## 🛠 General Prerequisites
-
-Before running any service, ensure you have the following installed globally:
-
-- **Python 3.10+** (Developed on 3.10.19)
-    
-- **Node.js & npm/yarn** (for Frontend)
-    
-- **MongoDB Atlas Account**
-    
-- **Cloudinary Account**
-    
-- **Brevo Account** (for mail sending)
-    
-- **Git**
-
----
-
-# Smart Sightseeing Support System
-
-Welcome to the **Smart Sightseeing Support System**. This project utilizes a **Microservices-based Architecture** to provide a comprehensive tourism experience. The system is divided into 5 independent modules (4 Backend Services & 1 Frontend Application) to manage different stages of the user journey:
-
-1. **Auth Service:** Manages User Authentication & Authorization.
-    
-2. **Before Service:** "Your_During_Feature_Here".
-    
-3. **During Service:**  Sightseeing Landmarks recognition and history.
-    
-4. **After Service:** "Your_After_Feature_Here".
-    
-5. **Frontend:** The user interface connecting all services.
-    
-
----
-
 # 🚀 Installation & Execution Guide
 
 This project uses **Git LFS (Large File Storage)** to handle large AI model files (>100MB). Please read the instructions below carefully to ensure you download the full source code and model files correctly.
