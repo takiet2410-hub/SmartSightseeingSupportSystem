@@ -430,7 +430,7 @@ async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(503, "Auth Service Unavailable")
 
 # --- SUMMARY FEATURES ---
-@app.post("/summary/create", response_model=TripSummaryResponse)
+@app.post("/summary/create")
 async def create_trip_summary(
     request: TripSummaryRequest,
     current_user_id: str = Depends(get_current_user_id)
@@ -448,8 +448,11 @@ async def create_trip_summary(
             for loc in request.manual_locations:
                 if isinstance(loc, dict):
                     manual_locs.append(loc)
+                elif hasattr(loc, 'model_dump'):
+                    manual_locs.append(loc.model_dump())
                 elif hasattr(loc, 'dict'):
                     manual_locs.append(loc.dict())
+
                 else:
                     logger.warning(f"Unknown manual_location type: {type(loc)}")
         
@@ -460,7 +463,7 @@ async def create_trip_summary(
         )
         
         # B. Save to MongoDB
-        summary_doc = dict(result) if isinstance(result, dict) else result
+        summary_doc = result.copy()
         summary_doc["created_at"] = datetime.utcnow()
         summary_doc["user_id"] = current_user_id
         

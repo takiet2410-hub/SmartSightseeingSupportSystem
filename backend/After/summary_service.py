@@ -35,12 +35,22 @@ class SummaryService:
         if not albums:
             return self._empty_result()
 
-        # 2. Map manual location data (Key = album_title)
-        manual_map = {
-            m["album_id"]: m
-            for m in manual_locations
-            if "album_id" in m
-        }
+        # 2. Map manual location data (Key = album_id)
+        manual_map = {}
+
+        for m in manual_locations:
+            album_id = None
+
+            if isinstance(m, dict):
+                album_id = m.get("album_id")
+            else:
+                album_id = getattr(m, "album_id", None)
+
+            if not album_id:
+                continue
+
+            manual_map[album_id] = m
+
 
         valid_points = []   # Points to plot on map
         timeline_names = [] # Location names
@@ -53,7 +63,7 @@ class SummaryService:
 
         # 3. ITERATE THROUGH EACH ALBUM
         for album in albums:
-            album_id = album.get("id")                     # 🔑 KEY DUY NHẤT
+            album_id = album.get("album_id") or album.get("id")
             album_title = album.get("title", "Unknown")
             display_title = album_title
             method = album.get("method", "")
@@ -64,6 +74,7 @@ class SummaryService:
             photos = album.get("photos", [])
             total_photos += len(photos)
             if not photos:
+                logger.warning(f"Album {album_title} has no photos, skipped")
                 continue
 
             # ---------- DATE ----------
@@ -82,12 +93,22 @@ class SummaryService:
             manual = manual_map.get(album_id)
             if manual:
                 try:
-                    lat = float(manual.get("lat"))
-                    lon = float(manual.get("lon"))
+                    if isinstance(manual, dict):
+                        lat = manual.get("lat")
+                        lon = manual.get("lon")
+                        name = manual.get("name")
+                    else:
+                        lat = manual.lat
+                        lon = manual.lon
+                        name = manual.name
+
+                    lat = float(lat)
+                    lon = float(lon)
+
                     if self._is_valid_coordinate(lat, lon):
                         final_lat = lat
                         final_lon = lon
-                        display_title = manual.get("name", album_title)
+                        display_title = name or album_title
                 except (TypeError, ValueError):
                     pass
 
@@ -99,8 +120,11 @@ class SummaryService:
 
                 for p in photos:
                     try:
-                        lat = float(p.get("lat"))
-                        lon = float(p.get("lon"))
+                        lat = p.get("lat") or p.get("latitude")
+                        lon = p.get("lon") or p.get("longitude")
+                        lat = float(lat)
+                        lon = float(lon)
+
                         if self._is_valid_coordinate(lat, lon):
                             lat_sum += lat
                             lon_sum += lon

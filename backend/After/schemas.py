@@ -40,10 +40,10 @@ class Album(BaseModel):
 
 # --- MODEL CHO TRIP SUMMARY ---
 class ManualLocationInput(BaseModel):
-    album_id: str
-    name: str
-    lat: float
-    lon: float
+    album_id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    name: Optional[str] = None
 
 class TripSummaryRequest(BaseModel):
     # Dùng Dict để linh hoạt nhận dữ liệu, tránh lỗi validation chặt chẽ
@@ -57,8 +57,10 @@ class TripSummaryResponse(BaseModel):
     total_photos: int
     start_date: str
     end_date: str
-    map_image_url: str
+    map_image_url: Optional[str] = ""
     timeline: List[str]
+    points: List[List[float]]           # 🔴 FIX #1
+    map_data: Dict[str, Any]             # 🔴 FIX #2
 
 class AlbumUpdateRequest(BaseModel):
     title: str
