@@ -410,6 +410,24 @@ async def cleanup_images():
             pass
     return {"status": "cleaned", "disk_files_removed": count}
 
+@app.get("/my-albums", response_model=List[Album])
+async def get_my_albums(current_user_id: str = Depends(get_current_user_id)):
+    try:
+        # Tìm các album có user_id tương ứng
+        cursor = album_collection.find({"user_id": current_user_id}).sort("created_at", -1)
+        return [doc for doc in cursor]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+@app.delete("/cleanup")
+async def cleanup_images():
+    _processed_cache.clear()
+    return {"status": "cleaned"}
+
 @app.post("/swagger-login")
 async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     auth_url = "http://localhost:8001/auth/login"

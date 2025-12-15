@@ -30,7 +30,7 @@ COPY . .
 RUN mkdir -p /app/temp /app/processed
 
 # Expose port
-EXPOSE 8000
+EXPOSE EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
