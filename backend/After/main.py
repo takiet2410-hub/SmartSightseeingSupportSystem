@@ -24,12 +24,15 @@ from fastapi.staticfiles import StaticFiles
 import requests
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Body
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
+from pydantic import BaseModel
 
 from config import TEMP_DIR, PROCESSED_DIR
 from metadata import MetadataExtractor
 # MERGED IMPORTS: Kept ClusteringService, added AlbumUpdateRequest from friend
 from clustering.service import ClusteringService
-from schemas import PhotoInput, PhotoOutput, Album, TripSummaryRequest, TripSummaryResponse, AlbumUpdateRequest
+from schemas import PhotoInput, PhotoOutput, Album, TripSummaryRequest, TripSummaryResponse, AlbumUpdateRequest, OSMGeocodeRequest
 from summary_service import SummaryService
 from filters.lighting import LightingFilter
 from filters.junk_detector import is_junk_batch, get_model as get_junk_model
@@ -761,6 +764,45 @@ async def delete_trip_summary(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@app.post("/geocode/osm")
+async def geocode_osm(
+    payload: OSMGeocodeRequest,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    address = payload.address.strip()
+    if not address:
+        raise HTTPException(400, "Address is required")
+
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": address,
+        "format": "json",
+        "limit": 5,
+        "countrycodes": "vn",
+        "accept-language": "vi"
+    }
+
+    headers = {
+        # ⚠️ bắt buộc theo rule OSM
+        "User-Agent": "photo-trip-app/1.0 (contact@yourdomain.com)"
+    }
+
+    resp = requests.get(url, params=params, headers=headers, timeout=5)
+    results = resp.json()
+
+    if not results:
+        raise HTTPException(404, "Address not found")
+
+    return [
+        {
+            "lat": float(r["lat"]),
+            "lon": float(r["lon"]),
+            "display_name": r["display_name"]
+        }
+        for r in results
+    ]
+
  
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

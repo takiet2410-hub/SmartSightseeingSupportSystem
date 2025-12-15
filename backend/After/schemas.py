@@ -62,3 +62,5 @@ class TripSummaryResponse(BaseModel):
 
 class AlbumUpdateRequest(BaseModel):
     title: str
+class OSMGeocodeRequest(BaseModel):
+    address: str
