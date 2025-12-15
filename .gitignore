@@ -26,3 +26,6 @@ __pycache__/
 # --- Chặn file hệ thống ---
 .DS_Store
 .vscode/
+
+.coverage
+htmlcov/
