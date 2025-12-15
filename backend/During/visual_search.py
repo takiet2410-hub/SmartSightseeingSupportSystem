@@ -41,7 +41,7 @@ async def visual_search_endpoint(
     except Exception as e:
         raise HTTPException(500, detail=f"Processing or search failed: {e}")
 
-    if not search_results or search_results[0]["score"] < 0.6:
+    if not search_results or search_results[0]["score"] < 0.9:
         return {"status": "not_found", "message": "Low confidence or no match."}
 
     best_match = search_results[0]
