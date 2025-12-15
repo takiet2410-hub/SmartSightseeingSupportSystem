@@ -219,7 +219,7 @@ Bash
 pip install -r requirements.txt
 ```
 
-4. Environment Configuration:
+ **4. Environment Configuration:**
 
 Create a `.env` file in the root directory. You will need to configure the following variables (based on `core/config.py`):
 
