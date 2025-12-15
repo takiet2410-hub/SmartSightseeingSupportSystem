@@ -419,15 +419,6 @@ async def get_my_albums(current_user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-@app.delete("/cleanup")
-async def cleanup_images():
-    _processed_cache.clear()
-    return {"status": "cleaned"}
-
 @app.post("/swagger-login")
 async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     auth_url = "http://localhost:8001/auth/login"
@@ -438,115 +429,61 @@ async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
     except Exception:
         raise HTTPException(503, "Auth Service Unavailable")
 
-# --- DELETE ALBUM ---
-@app.delete("/albums/{album_id}")
-async def delete_album(album_id: str, current_user_id: str = Depends(get_current_user_id)):
-    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
-    if not album: raise HTTPException(404, "Album not found")
-    
-    cloud_pids = []
-    if "photos" in album:
-        for p in album["photos"]:
-            if p.get("image_url") and "cloudinary" in p["image_url"]:
-                pid = cloud_service.get_public_id_from_url(p["image_url"])
-                if pid: cloud_pids.append(pid)
-            
-            # Helper to delete local backup if exists
-            delete_local_file(p.get("filename"))
-    
-    if cloud_pids:
-        cloud_service.delete_resources(cloud_pids)
-    
-    album_collection.delete_one({"_id": album_id})
-    return {"message": "Album deleted"}
-
-# --- RENAME ALBUM ---
-@app.patch("/albums/{album_id}/rename")
-async def rename_album(album_id: str, request: AlbumUpdateRequest, current_user_id: str = Depends(get_current_user_id)):
-    if not request.title.strip(): raise HTTPException(400, "Title empty")
-    res = album_collection.update_one(
-        {"_id": album_id, "user_id": current_user_id},
-        {"$set": {"title": request.title}}
-    )
-    if res.matched_count == 0: raise HTTPException(404, "Album not found")
-    return {"message": "Renamed", "new_title": request.title}
-
-# --- DELETE PHOTO FROM ALBUM (RESTORED) ---
-@app.delete("/albums/{album_id}/photos/{photo_id}")
-async def delete_photo_from_album(album_id: str, photo_id: str, current_user_id: str = Depends(get_current_user_id)):
-    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
-    if not album: raise HTTPException(404, "Album not found")
-    
-    target_photo = next((p for p in album.get("photos", []) if p.get("id") == photo_id), None)
-    if not target_photo: raise HTTPException(404, "Photo not found")
-
-    if target_photo.get("image_url") and "cloudinary" in target_photo["image_url"]:
-        pid = cloud_service.get_public_id_from_url(target_photo["image_url"])
-        if pid: cloud_service.delete_resources([pid])
-    
-    delete_local_file(target_photo.get("filename"))
-    
-    album_collection.update_one({"_id": album_id}, {"$pull": {"photos": {"id": photo_id}}})
-    return {"message": "Photo deleted"}
-
-# --- SHARE ALBUM FEATURES ---
-@app.post("/albums/{album_id}/share")
-async def create_share_link(album_id: str, current_user_id: str = Depends(get_current_user_id)):
-    album = album_collection.find_one({"_id": album_id, "user_id": current_user_id})
-    if not album: raise HTTPException(404, "Album not found")
-    
-    token = album.get("share_token") or str(uuid.uuid4())
-    album_collection.update_one({"_id": album_id}, {"$set": {"share_token": token, "is_public": True}})
-    return {"message": "Link created", "share_token": token, "full_url_hint": f"/shared-albums/{token}"}
-
-@app.delete("/albums/{album_id}/share")
-async def revoke_share_link(album_id: str, current_user_id: str = Depends(get_current_user_id)):
-    res = album_collection.update_one(
-        {"_id": album_id, "user_id": current_user_id},
-        {"$unset": {"share_token": ""}, "$set": {"is_public": False}}
-    )
-    if res.matched_count == 0: raise HTTPException(404, "Album not found")
-    return {"message": "Share link revoked"}
-
-@app.get("/shared-albums/{share_token}")
-async def view_shared_album(share_token: str):
-    album = album_collection.find_one({"share_token": share_token, "is_public": True})
-    if not album: raise HTTPException(404, "Album not found or link expired")
-    return {
-        "title": album.get("title"),
-        "cover_photo_url": album.get("cover_photo_url"),
-        "download_zip_url": album.get("download_zip_url"),
-        "photos": album.get("photos", [])
-    }
-
 # --- SUMMARY FEATURES ---
-@app.post("/trip-summary")
-async def generate_trip_summary(
+@app.post("/summary/create", response_model=TripSummaryResponse)
+async def create_trip_summary(
     request: TripSummaryRequest,
     current_user_id: str = Depends(get_current_user_id)
 ):
+    """
+    Generate trip summary from album data
+    Supports both real user tokens and test scripts
+    """
     try:
+        summary_service = SummaryService()
+        
+        # ✅ Handle manual_locations (can be dicts or Pydantic models)
         manual_locs = []
         if request.manual_locations:
             for loc in request.manual_locations:
-                if isinstance(loc, dict): manual_locs.append(loc)
-                elif hasattr(loc, 'dict'): manual_locs.append(loc.dict())
-
-        result = summary_service.generate_summary(request.album_data, manual_locs)
+                if isinstance(loc, dict):
+                    manual_locs.append(loc)
+                elif hasattr(loc, 'dict'):
+                    manual_locs.append(loc.dict())
+                else:
+                    logger.warning(f"Unknown manual_location type: {type(loc)}")
         
+        # A. Generate summary
+        result = summary_service.generate_summary(
+            album_data=request.album_data,
+            manual_locations=manual_locs
+        )
+        
+        # B. Save to MongoDB
         summary_doc = dict(result) if isinstance(result, dict) else result
         summary_doc["created_at"] = datetime.utcnow()
         summary_doc["user_id"] = current_user_id
         
         try:
             summary_collection.insert_one(summary_doc)
+            logger.info(f"✅ Saved trip summary to MongoDB")
         except Exception as e:
-            logger.error(f"DB Error: {e}")
-            
+            logger.error(f"MongoDB save failed: {e}")
+        
+        # C. Push to WebSocket
+        try:
+            await manager.send_personal_message(result, current_user_id)
+            logger.info(f"✅ Pushed to WebSocket for user: {current_user_id}")
+        except Exception as e:
+            logger.error(f"WebSocket push failed: {e}")
+        
         return result
+        
     except Exception as e:
-        logger.error(f"Summary Error: {e}")
-        raise HTTPException(500, str(e))
+        logger.error(f"Summary error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/summary/history")
 async def get_summary_history(user_id: str = "test_runner"):
@@ -823,5 +760,4 @@ async def geocode_osm(
 
  
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8003)
-    uvicorn.run(app, host="0.0.0.0", port=8003)
+    uvicorn.run(app, host="127.0.0.1", port=7860)
