@@ -4,7 +4,7 @@ Welcome to the **Smart Sightseeing Support System**. This project utilizes a **M
 
 1. **Auth Service:** Manages User Authentication & Authorization.
     
-2. **Before Service:** "AI Travel Consultant".
+2. **Before Service:** "Smart Recommendation System".
     
 3. **During Service:**  Sightseeing Landmarks recognition and history.
     
