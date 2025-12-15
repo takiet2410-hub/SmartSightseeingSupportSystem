@@ -229,16 +229,19 @@ class TestHistoryManagement(unittest.TestCase):
         mock_result.modified_count = 1
         mock_col.update_one.return_value = mock_result
 
-        urls_to_delete = ["url_ok", "url_fail"]
+        # [SỬA LẠI] Dùng URL giả nhưng đúng định dạng Cloudinary để vượt qua check của get_public_id_from_url
+        urls_to_delete = [
+            "https://res.cloudinary.com/demo/image/upload/v1/ok.jpg",   # Link 1 (Sẽ xoá OK)
+            "https://res.cloudinary.com/demo/image/upload/v1/fail.jpg"  # Link 2 (Sẽ gây lỗi Exception)
+        ]
 
         # Action
         result = delete_history_items(image_urls=urls_to_delete, user_id=TEST_USER_ID)
 
         # Assertion
-        # Vẫn phải gọi DB update để xoá record dù ảnh trên cloud lỗi (theo logic code của bạn)
         self.assertTrue(mock_col.update_one.called)
         
-        # deleted_cloud_images chỉ nên là 1 (do cái thứ 2 bị lỗi)
+        # deleted_cloud_images = 1 (vì ảnh 1 xoá được, ảnh 2 bị lỗi exception nên không tính)
         self.assertEqual(result["deleted_cloud_images"], 1)
         self.assertEqual(result["status"], "success")
 
