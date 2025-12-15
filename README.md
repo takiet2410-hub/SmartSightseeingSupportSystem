@@ -108,43 +108,211 @@ _Note: This process may take a few minutes depending on your internet speed._
 Please follow the instructions for each module below.
 
 ---------
-## 1. Auth Service (Authentication)
+## 1. Auth Service (User Management)
 
-_Handles registration, login, and JWT token generation._
+_Handles user registration, multi-provider authentication (Local, Google), JWT issuance, and email verification._
 
-### Setup & Run
+This project provides the core identity backend using FastAPI, MongoDB, and JWT. It features a "Split Account" architecture (allowing the same email to exist separately for Local vs. OAuth), integrates **Brevo API** for transactional emails, and includes a built-in HTML interface for password resets.
 
-1. Navigate to the directory: `cd auth`
+### Prerequisites (Specific to Auth Module)
+
+- **Python 3.10+** (Developed on 3.10.19)
     
-2. Create virtual environment & install dependencies:
+- **MongoDB Atlas Account** (for user data storage)
     
-    Bash
+- **Brevo (formerly Sendinblue) Account** (required for sending emails via API)
     
-    ```
-    python -m venv venv
-    source venv/bin/activate  # Windows: .\venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
-    
-3. Configure `.env` file (See `core/config.py` for reference):
-    
-    Code snippet
-    
-    ```
-    MONGO_URI=...
-    JWT_SECRET_KEY=...
-    ```
-    
-4. **Start Server:**
-    
-    Bash
-    
-    ```
-    uvicorn main:app --reload --port 8001
-    ```
+- **Google Developer Apps** (for Client IDs/Secrets)
     
 
-> **Note:** The Auth service runs on **Port 8001** (Example).
+### Installation
+
+**1. Navigate to the folder:**
+
+Bash
+
+```
+cd Auth
+```
+
+**2. Create and activate a virtual environment:**
+
+Bash
+
+```
+# It is recommended to use Python 3.10
+python3.10 -m venv venv
+
+# Windows:
+.\venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+```
+
+**3. Install dependencies:**
+
+Bash
+
+```
+pip install -r requirements.txt
+```
+
+**4. Environment Configuration:**
+
+Create a `.env` file in the root directory. Configure the following based on `config.py` and `email_utils.py`:
+
+```
+# Database
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+DB_NAME=SmartTourismDB
+COLLECTION_NAME=Users
+
+# Security (Must match other Services)
+SECRET_KEY=your_super_secret_key_matching_during_service
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
+
+# Email Service (Brevo API)
+# Get this key from Brevo Dashboard -> SMTP & API -> API Keys
+BREVO_API_KEY=xkeysib-your-long-api-key-here
+MAIL_USERNAME=noreply.smarttourism@gmail.com  # Used as the "Sender" email address
+
+# OAuth Providers
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+
+FACEBOOK_APP_ID=your_facebook_app_id
+FACEBOOK_APP_SECRET=your_facebook_app_secret
+```
+
+### How to Run the Auth Service
+
+The project uses Uvicorn as the server. **Crucially**, you must initialize the database indexes first to support the "unique username per provider" logic.
+
+#### Prerequisites
+
+Ensure you are in the **root directory** of the project.
+
+#### 1. Initialize Database (First Run Only):
+
+Run the initialization script to create the **Compound Index** (`username` + `auth_provider`) and remove old conflicting indexes5.
+
+Bash
+
+```
+python init_auth_db.py
+```
+
+Note: Wait for the log message:
+
+✅ Đã tạo Index Kép (Username + Provider).
+
+🎉 Database Auth đã sẵn sàng...
+
+#### 2. Start the Server:
+
+Run the following command in your terminal:
+
+Bash
+
+```
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Note: Wait for the log message:
+
+INFO: Application startup complete.
+
+#### 3. Access Swagger UI:
+
+Open your web browser and navigate to:
+
+```
+http://127.0.0.1:8000/docs
+```
+
+---
+
+### Step-by-Step API Usage Guide
+
+#### A. Registration & Email Verification (`POST /auth/register`)
+
+1. Find the **`POST /auth/register`** endpoint and click **Try it out**.
+    
+2. **Input:** Enter user details (email must be valid to receive the activation link).
+    
+    JSON
+    
+    ```
+    {
+      "username": "user@example.com",
+      "password": "strongpassword123",
+      "email": "user@example.com"
+    }
+    ```
+    
+3. Click **Execute**.
+    
+4. **Verification:**
+    
+    - The API returns a success message.
+        
+    - Check your real email inbox (configured via Brevo).
+        
+    - Click the **"Kích hoạt ngay"** link in the email. This hits the `GET /auth/verify-email` endpoint to set `is_active=True`6.
+        
+
+#### B. Login Local (`POST /auth/login`)
+
+1. Find the **`POST /auth/login`** endpoint.
+    
+2. **Input:** Enter the `username` and `password` you just registered and verified.
+    
+3. Click **Execute**.
+    
+4. **Result:** Copy the `access_token` from the JSON response.
+    
+    - _Note: If you receive a 400 error about "Tài khoản chưa được kích hoạt", please complete step A.4 first._
+        
+
+#### C. OAuth Login (Google)
+
+_Note: These endpoints expect an Access Token/ID Token **from the provider**, not a username/password._
+
+1. **Google:**
+    
+    - Use **`POST /auth/google`**.
+        
+    - Input: `{"token": "your_google_id_token_from_frontend"}`.
+        
+2. **Result:** Endpoint verifies the token with the provider, creates a user in MongoDB if they don't exist (with `auth_provider: "google"` ), and return your internal JWT7.
+    
+
+#### D. Forgot Password Flow (Email + UI)
+
+This service includes both the API to trigger the email and a **Frontend UI** to reset the password.
+
+1. **Request Reset:**
+    
+    - Use **`POST /auth/forgot-password`**.
+        
+    - Input: `{"username": "...", "email": "..."}`.
+        
+    - **Result:** A Brevo email is sent containing a link like `.../reset-password?token=xyz`8.
+        
+2. **Perform Reset (UI Method):**
+    
+    - Open the link from the email in a browser.
+        
+    - You will see a **User Interface** (rendered by `main.py`) asking for "Mật khẩu mới" and "Nhập lại mật khẩu".
+        
+    - Fill the form and click "Đổi mật khẩu".
+        
+3. **Perform Reset (API Method - Manual):**
+    
+    - Use **`POST /auth/reset-password`** in Swagger.
+        
+    - Input: `{"token": "token_from_email", "new_password": "...", "confirm_password": "..."}`.
 
 ---
 
@@ -220,7 +388,7 @@ Bash
 pip install -r requirements.txt
 ```
 
-4. Environment Configuration:
+ **4. Environment Configuration:**
 
 Create a `.env` file in the root directory. You will need to configure the following variables (based on `core/config.py`):
 
