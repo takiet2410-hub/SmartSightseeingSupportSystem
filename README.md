@@ -1,10 +1,13 @@
+
+---
+
 # Smart Sightseeing Support System
 
 Welcome to the **Smart Sightseeing Support System**. This project utilizes a **Microservices-based Architecture** to provide a comprehensive tourism experience. The system is divided into 5 independent modules (4 Backend Services & 1 Frontend Application) to manage different stages of the user journey:
 
 1. **Auth Service:** Manages User Authentication & Authorization.
     
-2. **Before Service:** Smart Recommendation System.
+2. **Before Service:** "Your_During_Feature_Here".
     
 3. **During Service:**  Sightseeing Landmarks recognition and history.
     
@@ -12,19 +15,6 @@ Welcome to the **Smart Sightseeing Support System**. This project utilizes a **M
     
 5. **Frontend:** The user interface connecting all services.
     
-
----
-
-# 🚀 Installation & Execution Guide
-
-This project uses **Git LFS (Large File Storage)** to handle large AI model files (>100MB). Please read the instructions below carefully to ensure you download the full source code and model files correctly.
-
----
-
-### ⚠️ IMPORTANT WARNING
-
-1.  **DO NOT USE THE "DOWNLOAD ZIP" BUTTON** on GitHub. This method often fails to download the actual LFS files (you will likely end up with 1KB pointer files instead).
-2.  You must use `git clone` and have `git lfs` installed.
 
 ---
 
@@ -220,36 +210,6 @@ Note: Wait for the log message:
 
 #### 2. Start the Server:
 
-Run the following command in your terminal:
-
-Bash
-
-```
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Note: Wait for the log message:
-
-INFO: Application startup complete.
-
-#### 3. Access Swagger UI:
-
-Open your web browser and navigate to:
-
-```
-http://127.0.0.1:8000/docs
-```
-
----
-
-### Step-by-Step API Usage Guide
-
-#### A. Registration & Email Verification (`POST /auth/register`)
-
-1. Find the **`POST /auth/register`** endpoint and click **Try it out**.
-    
-2. **Input:** Enter user details (email must be valid to receive the activation link).
-    
     JSON
     
     ```
@@ -301,8 +261,7 @@ _Note: These endpoints expect an Access Token/ID Token **from the provider**, no
 
 This service includes both the API to trigger the email and a **Frontend UI** to reset the password.
 
-1. **Request Reset:**
-    
+1. **Request Reset:**    
     - Use **`POST /auth/forgot-password`**.
         
     - Input: `{"username": "...", "email": "..."}`.
@@ -532,6 +491,8 @@ _Save a destination to your personal list (Requires Auth)._
 
 6. Verify: Use **`GET /favorites/`** to see your saved list.
 
+---
+
 ## 3. During Service (Sightseeing Recognition)
 
 _Handles visual search, AI detection, and detection history._
@@ -628,7 +589,6 @@ Run the following command in your terminal:
 
 `INFO:     Application startup complete.`
 #### 2.  **Access Swagger UI:**
-
 Open your web browser and navigate to:
 
 ```
@@ -674,7 +634,6 @@ Find the **`POST /visual-search`** endpoint.
       * If you successfully completed Step A (Authentication), the API will ignore the `X-Temp-ID` and save the result directly to your User History.
      
 #### C. Synchronize History (`POST /history/sync`)
-
   * **Context:** This is a **hidden background function**. In the real application, the Frontend automatically calls this endpoint immediately after a user logs in to merge their "Guest History" into their "User Account".
 
   * **How to Test in Swagger:**
@@ -730,7 +689,6 @@ This endpoint provides full metadata about a specific detection, including the m
 5.  **Result:** You will receive a detailed JSON object containing the landmark's full information (description, location, tags) and the link to the reference image used for matching.
 
 #### F. Delete History (`DELETE /history/delete`)
-
 This endpoint allows you to remove specific items. It performs a "Dual Delete": removing the record from **MongoDB** and destroying the actual image on **Cloudinary**.
 
 1.  Ensure you are Authorized.
@@ -765,7 +723,6 @@ This endpoint allows you to remove specific items. It performs a "Dual Delete": 
 ## 4. After Service (Feedback & Review)
 
 _Handles post-trip reviews and ratings._
-
 ### Setup & Run
 
 1. Navigate to the directory: `cd after`
@@ -843,7 +800,7 @@ To test the complete flow of the system:
 3. **Registration/Login:** Create an account (Hits **Auth Service**).
     
 4. **Search Places or Get Recommendation:** Find a place to travel (Hits **Before Service**).
-    
+
 5. **Visual Search:** Upload an image of a landmark (Hits **During Service**).
     
 6. **Create Album:** Create Albums and Trip Summary based on the pictures you take (Hits **After Service**).
