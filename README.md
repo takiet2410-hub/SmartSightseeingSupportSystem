@@ -147,7 +147,7 @@ _Handles registration, login, and JWT token generation._
 
 ---
 
-## 2. Before Service (AI Travel Consultant)
+## 2. Before Service (Smart Recommendation System)
 
 _Handles intelligent destination recommendations using Hybrid Search (Keywords + Semantic) and Generative AI (RAG)._
 
@@ -193,7 +193,7 @@ DESTINATIONS_COLLECTION=Destinations
 
 # LLM (Google Gemini)
 GEMINI_API_KEY=your_google_gemini_api_key
-GEMINI_MODEL_NAME=gemini-1.5-flash
+GEMINI_MODEL_NAME=gemini-2.5-flash
 
 # Weather
 OPENWEATHER_API_KEY=your_openweather_api_key
