@@ -117,32 +117,6 @@ _Note: This process may take a few minutes depending on your internet speed._
 Please follow the instructions for each module below.
 
 ---------
-## 1. Auth Service (Authentication)
-
-_Handles registration, login, and JWT token generation._
-
-### Setup & Run
-
-1. Navigate to the directory: `cd auth`
-    
-2. Create virtual environment & install dependencies:
-    
-    Bash
-    
-    ```
-    python -m venv venv
-    source venv/bin/activate  # Windows: .\venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
-    
-3. Configure `.env` file (See `core/config.py` for reference):
-    
-    Code snippet
-    
-    ```
-    MONGO_URI=...
-    JWT_SECRET_KEY=...
-    ```
 ## 1. Auth Service (User Management)
 
 _Handles user registration, multi-provider authentication (Local, Google), JWT issuance, and email verification._
