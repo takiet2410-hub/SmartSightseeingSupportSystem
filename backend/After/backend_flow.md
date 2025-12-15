@@ -21,6 +21,7 @@ It is responsible for:
 
 * The After Service **does NOT connect to the During Service**
 * All data comes **from the Frontend only**
+* Remember to change cloudinary api key (key on messenger)
 
 ---
 
