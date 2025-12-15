@@ -1,8 +1,3 @@
-
-<<<<<<< HEAD
-=======
----
-
 # Smart Sightseeing Support System
 
 Welcome to the **Smart Sightseeing Support System**. This project utilizes a **Microservices-based Architecture** to provide a comprehensive tourism experience. The system is divided into 5 independent modules (4 Backend Services & 1 Frontend Application) to manage different stages of the user journey:
@@ -624,7 +619,6 @@ _The user interface built with React/Vue/Mobile._
     Bash
     
     ```
->>>>>>> ca14bc550789a0e2e6ea0d032cb82280d32de04c
     npm install
     # or
     yarn install
