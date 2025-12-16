@@ -55,12 +55,14 @@ class TripSummaryResponse(BaseModel):
     trip_title: str
     total_distance_km: float
     total_locations: int
+    total_photos: int
     start_date: str
     end_date: str
     map_image_url: Optional[str] = None
     timeline: List[str]
     points: List[List[float]]           # 🔴 FIX #1
     map_data: Dict[str, Any]             # 🔴 FIX #2
+     
 
 class AlbumUpdateRequest(BaseModel):
     title: str
