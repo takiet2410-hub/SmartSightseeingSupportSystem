@@ -18,7 +18,10 @@ class SummaryService:
         # Configuration
         self.USE_INTERACTIVE_MAP = os.getenv("USE_INTERACTIVE_MAP", "true").lower() == "true"
         self.MAPBOX_MONTHLY_LIMIT = int(os.getenv("MAPBOX_MONTHLY_LIMIT", "45000"))
-        self.mapbox_usage_file = "mapbox_usage.txt"
+        self.mapbox_usage_file = os.path.join(
+            os.getenv("DATA_DIR", "/tmp"),
+            "mapbox_usage.txt"
+        )
 
     def generate_summary(self, album_data: dict, manual_locations: List[dict] = None):
         """
@@ -206,7 +209,7 @@ class SummaryService:
                 "provider": "mapbox",
                 "mapbox_token": self.mapbox_token
             }
-            response["map_image_url"] = ""
+            response["map_image_url"] = None
             # Track usage
             self._increment_mapbox_usage()
         else:

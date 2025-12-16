@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class PhotoInput(BaseModel):
     id: str
     filename: str
-    local_path: str 
+    local_path: Optional[str] = None 
     timestamp: Optional[datetime] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -48,16 +48,17 @@ class ManualLocationInput(BaseModel):
 class TripSummaryRequest(BaseModel):
     # Dùng Dict để linh hoạt nhận dữ liệu, tránh lỗi validation chặt chẽ
     album_data: Dict[str, Any] 
-    manual_locations: List[ManualLocationInput] = []
+    manual_locations: List[ManualLocationInput] = Field(default_factory=list)
+
 
 class TripSummaryResponse(BaseModel):
     trip_title: str
     total_distance_km: float
     total_locations: int
-    total_photos: int
-    start_date: str
+    start_date: Optional[datetime]
+    end_date: Optional[datetime]
     end_date: str
-    map_image_url: Optional[str] = ""
+    map_image_url: Optional[str] = None
     timeline: List[str]
     points: List[List[float]]           # 🔴 FIX #1
     map_data: Dict[str, Any]             # 🔴 FIX #2

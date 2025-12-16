@@ -365,7 +365,7 @@ async def create_album(
                 cover_photo_url=cover_url,
                 photos=output_photos,
                 created_at=datetime.utcnow(),
-                # needs_manual_location=not has_gps # Uncomment if your schema supports this
+                needs_manual_location=not has_gps
             )
             final_albums.append(album_out)
             
@@ -489,9 +489,9 @@ async def create_trip_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/summary/history")
-async def get_summary_history(user_id: str = "test_runner"):
+async def get_summary_history(current_user_id: str = Depends(get_current_user_id)):
     try:
-        cursor = summary_collection.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1)
+        cursor = summary_collection.find({"user_id": current_user_id}, {"_id": 0}).sort("created_at", -1)
         return list(cursor)
     except Exception as e:
         logger.error(f"Error fetching history: {e}")
