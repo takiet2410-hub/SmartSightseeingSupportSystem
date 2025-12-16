@@ -6,6 +6,7 @@ from PIL.ExifTags import TAGS
 from pillow_heif import register_heif_opener
 
 from logger_config import logger
+from pydantic import BaseModel
 
 register_heif_opener()
 
@@ -129,36 +130,44 @@ class MetadataExtractor:
             return result
 
     def _parse_gps(self, gps: Dict) -> tuple:
-        """Parse GPS coordinates from EXIF GPS data"""
-        def to_deg(value):
-            """Convert GPS coordinates to degrees"""
-            if isinstance(value, (tuple, list)) and len(value) == 3:
-                d, m, s = value
-                return float(d) + (float(m) / 60.0) + (float(s) / 3600.0)
-            return float(value)
+    
+        def rational_to_float(r):
+            try:
+                return float(r)
+            except Exception:
+                # (num, den)
+                return r[0] / r[1]
+
+        def dms_to_deg(dms):
+            if not dms or len(dms) != 3:
+                return None
+            d = rational_to_float(dms[0])
+            m = rational_to_float(dms[1])
+            s = rational_to_float(dms[2])
+            return d + m / 60.0 + s / 3600.0
 
         try:
-            # GPS data might be dict or IFDRational
-            if isinstance(gps, dict):
-                lat = to_deg(gps.get(2))
-                lon = to_deg(gps.get(4))
-                lat_ref = gps.get(1, 'N')
-                lon_ref = gps.get(3, 'E')
-            else:
-                # Handle as object with attributes
-                lat = to_deg(gps[2])
-                lon = to_deg(gps[4])
-                lat_ref = gps[1]
-                lon_ref = gps[3]
-            
-            # Apply hemisphere
-            if lat_ref == 'S':
+            lat_dms = gps.get(2)
+            lon_dms = gps.get(4)
+            lat_ref = gps.get(1, "N")
+            lon_ref = gps.get(3, "E")
+
+            lat = dms_to_deg(lat_dms)
+            lon = dms_to_deg(lon_dms)
+
+            if lat is None or lon is None:
+                return None, None
+
+            if lat_ref == "S":
                 lat = -lat
-            if lon_ref == 'W':
+            if lon_ref == "W":
                 lon = -lon
-                
+
             return lat, lon
-            
-        except (KeyError, IndexError, TypeError, ValueError) as e:
+
+        except Exception as e:
             logger.debug(f"GPS parsing failed: {e}")
             return None, None
+
+class AlbumUpdateRequest(BaseModel):
+    title: str

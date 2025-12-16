@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class PhotoInput(BaseModel):
     id: str
     filename: str
-    local_path: str 
+    local_path: Optional[str] = None 
     timestamp: Optional[datetime] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -36,18 +36,20 @@ class Album(BaseModel):
     cover_photo_url: Optional[str] = None
     photos: List[PhotoOutput]
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    needs_manual_location: bool = False
 
 # --- MODEL CHO TRIP SUMMARY ---
 class ManualLocationInput(BaseModel):
-    album_title: str
-    name: str
-    lat: float
-    lon: float
+    album_id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    name: Optional[str] = None
 
 class TripSummaryRequest(BaseModel):
     # Dùng Dict để linh hoạt nhận dữ liệu, tránh lỗi validation chặt chẽ
     album_data: Dict[str, Any] 
-    manual_locations: List[ManualLocationInput] = []
+    manual_locations: List[ManualLocationInput] = Field(default_factory=list)
+
 
 class TripSummaryResponse(BaseModel):
     trip_title: str
@@ -56,5 +58,13 @@ class TripSummaryResponse(BaseModel):
     total_photos: int
     start_date: str
     end_date: str
-    map_image_url: str
+    map_image_url: Optional[str] = None
     timeline: List[str]
+    points: List[List[float]]           # 🔴 FIX #1
+    map_data: Dict[str, Any]             # 🔴 FIX #2
+     
+
+class AlbumUpdateRequest(BaseModel):
+    title: str
+class OSMGeocodeRequest(BaseModel):
+    address: str
