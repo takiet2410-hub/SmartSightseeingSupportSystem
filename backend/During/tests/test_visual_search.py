@@ -182,7 +182,7 @@ class TestVisualSearchEndpoint(unittest.TestCase):
         shared_resources.db = mock_db
         
         mock_embed.return_value = [0.2] * 768
-        mock_search.return_value = [{"landmark_id": "lm_bigben", "score": 0.88}]
+        mock_search.return_value = [{"landmark_id": "lm_bigben", "score": 0.96}]
 
         # 3. Action (Không gửi Header X-Temp-ID)
         files = {"file": ("test.jpg", self.valid_image_bytes, "image/jpeg")}

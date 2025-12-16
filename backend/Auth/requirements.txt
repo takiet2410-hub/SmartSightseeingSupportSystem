@@ -12,3 +12,9 @@ python-jose[cryptography]
 python-multipart
 google-auth
 fastapi-mail
+
+# Additional dependencies for unit testing
+pytest
+pytest-asyncio 
+httpx
+pytest-cov

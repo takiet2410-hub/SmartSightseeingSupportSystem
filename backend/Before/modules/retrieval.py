@@ -59,34 +59,39 @@ def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption
         "overall_rating": 1
     }
     
-    mongo_sort = [("overall_rating", -1)] 
+    # 1. Xác định tiêu chí Sort
+    sort_criteria = [("overall_rating", -1)] # Mặc định Rating giảm dần
     
-    if sort_option == SortOption.NAME_ASC:
-        mongo_sort = [("name", 1)] # A-Z
+    if sort_option == SortOption.RATING_ASC:
+        sort_criteria = [("overall_rating", 1)]
+    elif sort_option == SortOption.NAME_ASC:
+        sort_criteria = [("name", 1)] # 1 là A-Z
     elif sort_option == SortOption.NAME_DESC:
-        mongo_sort = [("name", -1)] # Z-A
-    elif sort_option == SortOption.RATING_ASC:
-        mongo_sort = [("overall_rating", 1)] # Rating thấp lên cao
-    elif sort_option == SortOption.RATING_DESC:
-        mongo_sort = [("overall_rating", -1)] # Rating cao xuống thấp
-        
-    # Áp dụng sort vào cursor
-    cursor = collection.find(query, projection)\
-                       .sort(mongo_sort)\
-                       .skip((page - 1) * limit)\
-                       .limit(limit)
+        sort_criteria = [("name", -1)] # -1 là Z-A
+    # RATING_DESC đã là mặc định ở trên
+    
+    # 2. Khởi tạo Cursor + Collation Tiếng Việt
+    vietnamese_collation = {"locale": "vi"}
+
+    cursor = collection.find(query, projection)
+    
+    # Áp dụng Collation
+    cursor = cursor.collation(vietnamese_collation)
+    
+    # Áp dụng Sort, Skip, Limit
+    cursor = cursor.sort(sort_criteria)\
+                   .skip((page - 1) * limit)\
+                   .limit(limit)
     
     results = []
-    print(f"--- Đang xử lý trang {page} ---")
     
     for index, doc in enumerate(cursor):
         try:
-            # 1. FIX LỖI OBJECT ID (Quan trọng nhất)
+            # 1. FIX LỖI OBJECT ID
             if "_id" in doc:
-                doc["_id"] = str(doc["_id"]) # Chuyển ObjectId thành string ngay lập tức
+                doc["_id"] = str(doc["_id"]) 
             
             # 2. Xử lý ID
-            # Ưu tiên landmark_id, nếu không có thì lấy _id đã string hóa
             doc["id"] = str(doc.get("landmark_id", doc.get("_id", "")))
 
             # 3. Xử lý Rating (Chống null)
@@ -100,12 +105,8 @@ def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption
             results.append(doc)
             
         except Exception as e:
-            # IN LỖI RA TERMINAL ĐỂ BẠN THẤY
-            print(f"❌ LỖI DATA TẠI ITEM #{index} (Landmark ID: {doc.get('landmark_id')}):")
-            print(f"   Lý do: {e}")
-            # continue giúp bỏ qua item lỗi này, không làm sập cả trang
+            print(f"❌ LỖI DATA TẠI ITEM #{index}: {e}")
             continue 
-    # --- KẾT THÚC ĐOẠN CODE SỬA ---
 
     return {
         "data": results,
@@ -151,7 +152,7 @@ def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardC
             vector_search_stage["filter"] = mongo_filter
 
     pipeline = [
-        # Stage 1: Tìm kiếm (Bắt buộc phải có limit)
+        # Stage 1: Tìm kiếm
         {
             "$vectorSearch": vector_search_stage
         },
@@ -175,7 +176,6 @@ def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardC
             }
         },
         # Stage 3: Lọc chặn dưới
-        # Chỉ giữ lại những kết quả thực sự giống
         {
             "$match": {
                 "score": {"$gte": threshold}
@@ -186,15 +186,13 @@ def retrieve_context(query_vector: List[float], hard_constraints: Optional[HardC
     try:
         results = list(collection.aggregate(pipeline))
         
-        # Xử lý làm sạch dữ liệu (như cũ)
+        # Xử lý làm sạch dữ liệu
         for doc in results:
             doc["_id"] = str(doc["_id"])
             doc["id"] = str(doc.get("landmark_id", doc.get("_id")))
             if doc.get("image_urls") is None: doc["image_urls"] = []
             if doc.get("overall_rating") is None: doc["overall_rating"] = 0.0
 
-        # In ra để debug xem lọc còn bao nhiêu
-        print(f"✅ Found {len(results)} items with score >= {threshold} (Pool size: {candidates_limit})")
         return results
         
     except Exception as e:

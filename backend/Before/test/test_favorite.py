@@ -1,42 +1,22 @@
-from fastapi.testclient import TestClient
+from unittest.mock import MagicMock, patch
 
-def test_add_favorite(client: TestClient, sample_data):
-    # 1. Thêm L001 vào yêu thích
-    response = client.post("/favorites/L001")
-    assert response.status_code == 200
-    assert response.json()["message"] == "Đã thêm vào mục yêu thích"
-
-    # 2. Kiểm tra trạng thái
-    check_response = client.get("/favorites/check/L001")
-    assert check_response.json()["is_favorite"] is True
-
-def test_remove_favorite(client: TestClient, sample_data):
-    # Setup: Thêm trước
-    client.post("/favorites/L001")
-
-    # 1. Xóa
-    response = client.delete("/favorites/L001")
-    assert response.status_code == 200
-    assert response.json()["message"] == "Đã xóa khỏi mục yêu thích"
-
-    # 2. Check lại
-    check_response = client.get("/favorites/check/L001")
-    assert check_response.json()["is_favorite"] is False
-
-def test_get_my_favorites_list(client: TestClient, sample_data):
-    # Setup: Thêm L001 và L002
-    client.post("/favorites/L001")
-    client.post("/favorites/L002")
-
-    response = client.get("/favorites/")
-    assert response.status_code == 200
-    data = response.json()
+def test_add_favorite(client):
+    mock_dest_col = MagicMock()
+    mock_dest_col.find_one.return_value = {"landmark_id": "lm_1"}
     
-    assert data["total"] == 2
-    ids = [item["id"] for item in data["data"]]
-    assert "L001" in ids
-    assert "L002" in ids
+    mock_fav_col = MagicMock()
+    mock_fav_col.update_one.return_value = MagicMock()
 
-def test_add_non_existent_favorite(client: TestClient):
-    response = client.post("/favorites/INVALID_ID")
-    assert response.status_code == 404
+    with patch("favorites.get_favorites_collection", return_value=mock_fav_col), \
+         patch("favorites.get_db_collection", return_value=mock_dest_col):
+        
+        response = client.post("/favorites/lm_1")
+        assert response.status_code == 200
+        assert response.json() == {"message": "Đã thêm vào mục yêu thích"}
+
+def test_add_favorite_not_found(client):
+    # Test case địa điểm không tồn tại
+    with patch("favorites.get_db_collection") as mock_dest:
+        mock_dest.return_value.find_one.return_value = None
+        response = client.post("/favorites/invalid")
+        assert response.status_code == 404

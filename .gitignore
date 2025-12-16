@@ -1,16 +1,31 @@
-# --- Python / Backend ---
-SSSS-demo/back-end/venv/
-SSSS-demo/back-end/__pycache__/
+# Ignore static files
+static/*
+
+# Ignore log files
+logs/*
+
+# Ignore test related files
+test_photos
+test_local.py
+
+.dockerignore
+temp/
+processed/
+
+node_modules/
+# --- Chặn file cấu hình & mật khẩu (QUAN TRỌNG) ---
+.env
+config.env
+*.key
+
+# --- Chặn rác Python ---
+__pycache__/
 *.pyc
-SSSS-demo/back-end/.env
-SSSS-demo/.env
+*.pyo
 
-# --- Node / Frontend ---
-front-end/node_modules/
-front-end/dist/
-front-end/.env
-front-end/.env.local
-
-# --- System ---
+# --- Chặn file hệ thống ---
 .DS_Store
-Thumbs.db
+.vscode/
+
+.coverage
+htmlcov/

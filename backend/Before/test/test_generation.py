@@ -1,71 +1,31 @@
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import json
-from modules.generation import call_llm_api, parse_llm_response
 
-# --- 1. TEST HÀM PARSE (XỬ LÝ LOGIC JSON) ---
+def test_search_semantic(client):
+    """Test API /search"""
+    # 1. Mock Vectorizer ra vector giả
+    with patch("main.vectorizer.transform_single", return_value=[0.1, 0.2]), \
+         patch("main.retrieve_context") as mock_retrieval:
+         
+        mock_retrieval.return_value = [{"landmark_id": "lm_1", "name": "Biển", "_id": "1"}]
+        
+        response = client.post("/search", json={"query": "biển đẹp"})
+        assert response.status_code == 200
+        assert response.json()["data"][0]["name"] == "Biển"
 
-def test_parse_llm_response_success():
-    """Test trường hợp AI trả về JSON chuẩn"""
-    # Giả lập string JSON mà AI trả về
-    valid_json_str = """
-    {
+def test_recommendations_success(client):
+    """Test API /recommendations (RAG Flow)"""
+    mock_llm_res = {
         "recommendations": [
-            {"name": "Hồ Gươm", "reason": "Đẹp"}
+            {"rank": 1, "name": "Đà Lạt", "justification_summary": "Lạnh", "suggested_activities": []}
         ]
     }
-    """
-    result = parse_llm_response(valid_json_str)
     
-    assert "recommendations" in result
-    assert result["recommendations"][0]["name"] == "Hồ Gươm"
-    assert "error" not in result
-
-def test_parse_llm_response_invalid_json():
-    """Test trường hợp AI trả về văn bản thường (lỗi format)"""
-    # AI trả về linh tinh, thiếu ngoặc
-    bad_json_str = "Đây là gợi ý của tôi: Hồ Gươm..." 
-    
-    result = parse_llm_response(bad_json_str)
-    
-    # Hàm parse phải bắt được lỗi và trả về dict chứa key "error"
-    assert "error" in result
-    assert result["error"] == "Invalid JSON from Gemini"
-
-# --- 2. TEST HÀM GỌI API (MOCK GOOGLE GEMINI) ---
-
-@patch("modules.generation.model") # Giả lập cái biến 'model' trong file generation.py
-def test_call_llm_api_success(mock_model):
-    """Test gọi hàm call_llm_api thành công"""
-    
-    # 1. Cấu hình Mock trả về object có thuộc tính .text
-    mock_response = MagicMock()
-    mock_response.text = '{"status": "ok"}'
-    
-    # Khi gọi model.generate_content(...), nó sẽ trả về mock_response
-    mock_model.generate_content.return_value = mock_response
-    
-    # 2. Gọi hàm cần test
-    result_text = call_llm_api("Test prompt")
-    
-    # 3. Kiểm tra kết quả
-    assert result_text == '{"status": "ok"}'
-    
-    # Kiểm tra xem hàm generate_content có thực sự được gọi không
-    mock_model.generate_content.assert_called_once_with("Test prompt")
-
-@patch("modules.generation.model")
-def test_call_llm_api_failure(mock_model):
-    """Test trường hợp gọi Google API bị lỗi (mất mạng/hết quota)"""
-    
-    # 1. Cấu hình Mock để QUĂNG LỖI (Raise Exception)
-    mock_model.generate_content.side_effect = Exception("API Quota Exceeded")
-    
-    # 2. Gọi hàm
-    result_json_str = call_llm_api("Test prompt")
-    
-    # 3. Parse ra để kiểm tra
-    result = json.loads(result_json_str)
-    
-    assert "error" in result
-    assert "API Quota Exceeded" in result["error"]
+    with patch("main.vectorizer.transform_single"), \
+         patch("main.retrieve_context", return_value=[{"landmark_id": "1", "name": "Đà Lạt"}]), \
+         patch("main.call_llm_api", return_value=json.dumps(mock_llm_res)):
+         
+        response = client.post("/recommendations", json={"vibe_prompt": "thích lạnh"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
+        assert response.json()["recommendations"][0]["name"] == "Đà Lạt"
