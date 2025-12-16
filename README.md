@@ -11,7 +11,8 @@ Welcome to the **Smart Sightseeing Support System**. This project utilizes a **M
     
 3. **During Service:**  Sightseeing Landmarks recognition and history.
     
-4. **After Service:** "Your_After_Feature_Here".
+4. **After Service:** Post-Trip Album Generation and Trip Summary.
+
     
 5. **Frontend:** The user interface connecting all services.
     
@@ -210,6 +211,36 @@ Note: Wait for the log message:
 
 #### 2. Start the Server:
 
+Run the following command in your terminal:
+
+Bash
+
+```
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Note: Wait for the log message:
+
+INFO: Application startup complete.
+
+#### 3. Access Swagger UI:
+
+Open your web browser and navigate to:
+
+```
+http://127.0.0.1:8000/docs
+```
+
+---
+
+### Step-by-Step API Usage Guide
+
+#### A. Registration & Email Verification (`POST /auth/register`)
+
+1. Find the **`POST /auth/register`** endpoint and click **Try it out**.
+    
+2. **Input:** Enter user details (email must be valid to receive the activation link).
+    
     JSON
     
     ```
@@ -719,30 +750,183 @@ This endpoint allows you to remove specific items. It performs a "Dual Delete": 
 
 5.  **Result:** The API will return the count of deleted database records and the count of images removed from the cloud.
     
----
-## 4. After Service (Feedback & Review)
 
-_Handles post-trip reviews and ratings._
+---
+
+## 4. After Service (Album Generation & Trip Summary)
+
+*Handles post-trip album generation, album management, and trip summary creation.*
+
+The **After Service** is responsible for processing user-uploaded photos **after the trip**, generating structured **photo albums**, and producing a **trip summary** based on those albums.
+This service operates **independently** and does **not directly communicate with the During Service**.
+
+---
+
+### 🎯 Core Responsibilities
+
+#### 1. Album Generation
+
+* Accepts **raw photos uploaded by the user**.
+* Extracts image metadata (timestamp, GPS if available).
+* Filters low-quality or junk images using:
+
+  * Lighting analysis
+  * AI-based junk detection
+* Automatically clusters photos into **albums** based on:
+
+  * Time proximity
+  * Metadata similarity
+* Uploads photos to **Cloudinary** and generates:
+
+  * Cover images
+  * Downloadable ZIP links per album
+* Stores album data persistently in the database.
+
+Each generated album contains:
+
+* Album title and creation method
+* Cover photo
+* Download ZIP link
+* List of photos with timestamps and optional GPS coordinates
+
+---
+
+#### 2. Album Management
+
+* Allows users to:
+
+  * Rename albums
+  * Delete entire albums
+  * Remove individual photos from an album
+* Supports **public sharing**:
+
+  * Generate a shareable public link
+  * Revoke shared access at any time
+* Ensures cloud and local resources are cleaned up when albums or photos are deleted.
+
+---
+
+#### 3. Manual Location Support (OSM)
+
+* When photos or albums lack GPS data, users can:
+
+  * Search locations using **OpenStreetMap (Nominatim)**
+  * Manually assign coordinates via frontend map interaction
+* Provides a geocoding API endpoint to convert addresses into coordinates.
+
+---
+
+#### 4. Trip Summary Generation
+
+* Creates a **trip summary** based on:
+
+  * Generated album data
+  * User-provided manual locations (if any)
+* Aggregates albums into a chronological overview of the trip.
+* Stores trip summaries for later retrieval and management.
+* Allows users to:
+
+  * View past trip summaries
+  * Delete unwanted summaries
+
+---
+
+### 🔁 Data Flow Integration
+
+* Uses authenticated user identity from the **Auth Service**.
+* Receives photos, album structure, and manual location inputs from the **Frontend**.
+* Does **not** fetch or depend on data from the **During Service**.
+
+---
+
+### 🧩 Key API Capabilities
+
+* `POST /create-album` – Upload photos and generate albums automatically
+* `PATCH /albums/{album_id}/rename` – Rename an album
+* `DELETE /albums/{album_id}` – Delete an album and associated resources
+* `DELETE /albums/{album_id}/photos/{photo_id}` – Remove a photo from an album
+* `POST /albums/{album_id}/share` – Create a public share link
+* `GET /shared-albums/{share_token}` – View a shared album
+* `POST /trip-summary` – Generate a trip summary from albums
+* `GET /summary/history` – View trip summary history
+* `POST /geocode/osm` – Convert address text to coordinates (OSM)
+
+---
+
 ### Setup & Run
 
 1. Navigate to the directory: `cd after`
-    
+
 2. Activate virtual environment & install dependencies.
-    
+
 3. Configure `.env` file.
-    
+
 4. **Start Server:**
-    
-    Bash
-    
-    ```
-    uvicorn main:app --reload --port 8003
-    ```
-    
+
+   ```bash
+   uvicorn main:app --reload --port 8003
+   ```
 
 > **Note:** The After service runs on **Port 8003** (Example).
 
 ---
+
+### ✅ Logical Flow Recap
+
+```text
+User Uploads Photos
+        ↓
+Album Generation
+        ↓
+Album Management / Location Adjustment
+        ↓
+Trip Summary Creation
+        ↓
+Frontend Visualization
+```
+
+
+### 🔁 Data Flow Integration
+
+* Receives detection history and landmark metadata from the **During Service**.
+* Uses user authentication information from the **Auth Service**.
+* Sends structured trip data to the **Frontend** for visualization and interaction.
+
+---
+
+### 🧩 Example Features
+
+* 📍 **Manual Location Selection:**
+  If photos lack GPS metadata, users can manually select the location on a map to ensure accuracy.
+
+* 🗂️ **Auto-Generated Travel Timeline:**
+  Photos are ordered chronologically and grouped by location.
+
+* ⭐ **Experience Rating:**
+  Users can rate their overall trip or individual landmarks.
+
+---
+
+### Setup & Run
+
+1. Navigate to the directory: `cd after`
+
+2. Activate virtual environment & install dependencies.
+
+3. Configure `.env` file.
+
+4. **Start Server:**
+
+   Bash
+
+   ```bash
+   uvicorn main:app --reload --port 8003
+   ```
+
+> **Note:** The After service runs on **Port 8003** (Example).
+
+---
+
 
 ## 5. Frontend Application
 

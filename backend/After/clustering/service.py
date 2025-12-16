@@ -1,7 +1,4 @@
-import threading
 from typing import List
-
-from sentence_transformers import SentenceTransformer
 
 from schemas import PhotoInput, PhotoOutput, Album
 from logger_config import logger
@@ -9,36 +6,9 @@ from .algorithms import (
     run_spatiotemporal,      # Tier 1
     run_jenks_time,          # Tier 2
     run_location_hdbscan,    # Tier 3
-    run_umap_semantic        # Tier 4
 )
 
-# --- THREAD-SAFE SINGLETON ---
-_clip_model = None
-_model_lock = threading.Lock()  # ADD THIS
-
-
-def get_model():
-    """
-    Thread-safe lazy loader for CLIP model.
-    """
-    global _clip_model
-    
-    # First check (fast path)
-    if _clip_model is not None:
-        return _clip_model
-    
-    # Acquire lock
-    with _model_lock:
-        # Second check (prevent duplicate loading)
-        if _clip_model is not None:
-            return _clip_model
-        
-        logger.info("Loading CLIP Model...")
-        _clip_model = SentenceTransformer('clip-ViT-B-32')
-        logger.info("CLIP Model Loaded")
-        
-        return _clip_model
-
+# NOTE: CLIP model removed - no longer needed
 
 class ClusteringService:
     @staticmethod
@@ -61,15 +31,18 @@ class ClusteringService:
             logger.info(f"Router: Count={len(clean_photos)}, Time={has_time}, GPS={has_gps}")
 
             if has_gps and has_time:
-                albums = run_spatiotemporal(clean_photos, dist_m=700, gap_min=240)
+                # Best case: GPS + Time
+                albums = run_spatiotemporal(clean_photos, dist_m=700, gap_min=120)
             elif has_time:
+                # Good case: Time only
                 albums = run_jenks_time(clean_photos)
             elif has_gps:
+                # OK case: GPS only
                 albums = run_location_hdbscan(clean_photos)
             else:
-                # Blind Mode
-                model = get_model()
-                albums = run_umap_semantic(clean_photos, model)
+                # Worst case: No GPS, No Time - Create single unsorted album
+                logger.warning("No GPS or Time metadata - creating unsorted collection")
+                albums = ClusteringService._create_unsorted_album(clean_photos)
 
         # 2. Append the Bad Photos (if any)
         if rejected_photos:
@@ -79,8 +52,36 @@ class ClusteringService:
         return albums
     
     @staticmethod
+    def _create_unsorted_album(photos: List[PhotoInput]) -> List[Album]:
+        """
+        Create a single album for photos without GPS or Time metadata.
+        Sort by quality score.
+        """
+        if not photos:
+            return []
+        
+        # Sort by quality score (best first)
+        photos.sort(key=lambda x: x.score, reverse=True)
+        
+        out_photos = [
+            PhotoOutput(
+                id=p.id, 
+                filename=p.filename, 
+                timestamp=p.timestamp,
+                score=p.score
+            ) for p in photos
+        ]
+        
+        return [Album(
+            title="Unsorted Collection", 
+            method="no_metadata_fallback", 
+            photos=out_photos
+        )]
+    
+    @staticmethod
     def _create_rejected_album(photos: List[PhotoInput]) -> List[Album]:
-        if not photos: return []
+        if not photos: 
+            return []
         
         out_photos = [
             PhotoOutput(
