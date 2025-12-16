@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.db import get_favorites_collection, get_db_collection 
 from deps import get_current_user
 from schemas import PaginatedResponse
-from datetime import datetime
+# [FIX 1] Import thêm timezone
+from datetime import datetime, timezone 
 
 router = APIRouter()
 
@@ -22,7 +23,7 @@ async def add_favorite(landmark_id: str, current_user_id: str = Depends(get_curr
             "$set": {
                 "user_id": current_user_id,
                 "landmark_id": landmark_id,
-                "saved_at": datetime.utcnow()
+                "saved_at": datetime.now(timezone.utc)
             }
         },
         upsert=True
@@ -32,7 +33,6 @@ async def add_favorite(landmark_id: str, current_user_id: str = Depends(get_curr
 # --- 2. BỎ LƯU (UNLIKE) ---
 @router.delete("/{landmark_id}")
 async def remove_favorite(landmark_id: str, current_user_id: str = Depends(get_current_user)):
-    # Lấy collection từ hàm getter
     fav_collection = get_favorites_collection()
     
     result = fav_collection.delete_one({
@@ -48,7 +48,7 @@ async def remove_favorite(landmark_id: str, current_user_id: str = Depends(get_c
 # --- 3. XEM DANH SÁCH YÊU THÍCH ---
 @router.get("/", response_model=PaginatedResponse)
 async def get_my_favorites(current_user_id: str = Depends(get_current_user)):
-    fav_collection = get_favorites_collection() # Lấy collection
+    fav_collection = get_favorites_collection()
     dest_collection = get_db_collection()
     
     fav_cursor = fav_collection.find({"user_id": current_user_id})
