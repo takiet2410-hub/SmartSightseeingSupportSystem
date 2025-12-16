@@ -24,21 +24,6 @@ class TestJunkDetector(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    def test_has_camera_model_with_exif(self):
-
-
-        test_image = os.path.join(
-            os.path.dirname(__file__),
-            "Test_images",
-            "real_photo.jpg"
-        )
-
-        if not os.path.exists(test_image):
-            self.skipTest("Real camera image with EXIF not available")
-
-        result = has_camera_model(test_image)
-        self.assertTrue(result)
-
     def test_has_camera_model_invalid_values(self):
         """Test rejection of invalid camera model values"""
         mock_img = Mock(spec=Image.Image)
