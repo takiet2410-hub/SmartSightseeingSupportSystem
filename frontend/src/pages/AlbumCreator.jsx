@@ -109,7 +109,7 @@ const AlbumCreator = () => {
                                     <p className="or-text">hoặc click để chọn</p>
                                 </>
                             )}
-                            <span className="hint">Hỗ trợ: JPG, PNG, HEIC (tối đa 50MB/ảnh, 500 ảnh)</span>
+                            <span className="hint">Hỗ trợ: JPG, PNG (tối đa 50MB/ảnh, 500 ảnh)</span>
                         </div>
                     </div>
 
