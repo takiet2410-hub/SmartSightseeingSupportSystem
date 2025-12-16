@@ -7,7 +7,7 @@ Welcome to the **Smart Sightseeing Support System**. This project utilizes a **M
 
 1. **Auth Service:** Manages User Authentication & Authorization.
     
-2. **Before Service:** "Your_During_Feature_Here".
+2. **Before Service:** Smart Recommendation System.
     
 3. **During Service:**  Sightseeing Landmarks recognition and history.
     
@@ -623,7 +623,7 @@ Run the following command in your terminal:
 Open your web browser and navigate to:
 
 ```
-    http://127.0.0.1:8000/docs
+    http://127.0.0.1:8002/docs
 ```
 
 You will see the interactive API documentation provided by Swagger UI.
@@ -955,9 +955,9 @@ _The user interface built with React/Vue/Mobile._
         Code snippet
         
         ```
-        VITE_AUTH_API=http://localhost:8001
-        VITE_BEFORE_API=http://localhost:8002
-        VITE_DURING_API=http://localhost:8000
+        VITE_AUTH_API=http://localhost:8000
+        VITE_BEFORE_API=http://localhost:8001
+        VITE_DURING_API=http://localhost:8002
         VITE_AFTER_API=http://localhost:8003
         ```
         
