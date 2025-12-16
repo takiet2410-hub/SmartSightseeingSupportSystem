@@ -55,8 +55,7 @@ class TripSummaryResponse(BaseModel):
     trip_title: str
     total_distance_km: float
     total_locations: int
-    start_date: Optional[datetime]
-    end_date: Optional[datetime]
+    start_date: str
     end_date: str
     map_image_url: Optional[str] = None
     timeline: List[str]
