@@ -1,0 +1,27 @@
+# --- Core Framework ---
+fastapi[all]
+uvicorn[standard]
+pydantic-settings
+openpyxl
+
+# --- Security & Auth  ---
+python-jose[cryptography]
+passlib[bcrypt]
+requests
+
+# --- Database & Storage ---
+pymongo
+
+# --- AI & RAG Pipeline ---
+pandas
+scikit-learn
+sentence-transformers
+joblib
+hf_xet
+google-generativeai
+
+#--- Unit Test ---
+pytest 
+httpx 
+mongomock
+pytest-asyncio
