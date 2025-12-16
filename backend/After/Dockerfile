@@ -29,8 +29,8 @@ COPY . .
 # Create temp directory for uploads
 RUN mkdir -p /app/temp /app/processed
 
-# Expose port
-EXPOSE EXPOSE 7860
+# Expose port (HuggingFace uses 7860)
+EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

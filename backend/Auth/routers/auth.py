@@ -1,12 +1,12 @@
 # routers/auth.py
+import os
 from fastapi import APIRouter, HTTPException, status
 from schemas import UserAuth, Token, GoogleAuth, UserRegister
 from core.db import user_collection
 from core.config import settings
 from core.security import get_password_hash, verify_password, create_access_token
 
-import requests # <--- Import thư viện này để gọi API Facebook
-from schemas import FacebookAuth # <--- Import Schema mới
+import requests
 
 # Thư viện cho Google OAuth
 from google.oauth2 import id_token
@@ -83,9 +83,9 @@ async def verify_email_endpoint(token: str):
         }
     )
     
-    # 4. Xong việc -> Đưa người dùng về trang Đăng nhập
-    # Note: /docs is just for testing. In production, this should redirect to your frontend login page.
-    return RedirectResponse(url="/docs")
+    # 4. Xong việc -> Đưa người dùng về trang Đăng nhập của Frontend
+    frontend_url = os.getenv("FRONTEND_URL", "https://smart-sightseeing-support-system-fr.vercel.app")
+    return RedirectResponse(url=f"{frontend_url}/login?verified=true")
 
 # --- 2. API ĐĂNG NHẬP THƯỜNG (Login Local) ---
 @router.post("/login", response_model=Token)
@@ -266,83 +266,3 @@ async def reset_password(body: ResetPasswordRequest):
     )
     
     return {"message": "Đặt lại mật khẩu thành công. Hãy đăng nhập lại."}
-
-
-# --- 6. API ĐĂNG NHẬP FACEBOOK (MỚI THÊM) ---
-@router.post("/facebook", response_model=Token)
-async def login_facebook(body: FacebookAuth):
-    """
-    Frontend gửi Access Token của Facebook lên.
-    Backend gọi sang Facebook để kiểm tra token đó có hợp lệ không và lấy info user.
-    """
-    token = body.access_token
-    if not token:
-        raise HTTPException(400, "Thiếu Facebook Access Token")
-
-    # 1. Gọi Facebook Graph API để lấy thông tin User
-    facebook_url = "https://graph.facebook.com/me"
-    params = {
-        "access_token": token,
-        "fields": "id,name,email,picture" # Yêu cầu trả về id, tên, email, ảnh
-    }
-    
-    try:
-        response = requests.get(facebook_url, params=params)
-        data = response.json()
-        
-        # Nếu token lỗi, Facebook trả về key 'error'
-        if "error" in data:
-            raise HTTPException(400, detail="Token Facebook không hợp lệ hoặc đã hết hạn")
-            
-        # Lấy thông tin
-        fb_id = data.get("id")
-        name = data.get("name")
-        email = data.get("email") # Lưu ý: Một số acc FB đk bằng sđt sẽ không có email
-        
-        # Nếu không có email, ta dùng FB ID làm username giả lập
-        final_username = email if email else f"fb_{fb_id}"
-
-        # 2. Logic tìm User trong DB (Tương tự Google)
-        # Chỉ tìm user có auth_provider là 'facebook'
-        db_user = user_collection.find_one({
-            "username": final_username, # Tìm theo email (hoặc fb_id)
-            "auth_provider": "facebook"
-        })
-
-        if db_user:
-            # User đã tồn tại -> Đăng nhập
-            user_id = str(db_user["_id"])
-            full_name = db_user.get("full_name", name)
-        else:
-            # User chưa tồn tại -> Tạo mới
-            new_user = {
-                "username": final_username,
-                "full_name": name,
-                "password": None, # Không có pass
-                "auth_provider": "facebook",
-                "facebook_id": fb_id, # Lưu thêm ID gốc của FB để chắc chắn
-                "created_at": datetime.utcnow(),
-                "email_recover": email, # Có thể None nếu FB ko trả về
-                "is_active": True # Facebook thì luôn Active
-            }
-            result = user_collection.insert_one(new_user)
-            user_id = str(result.inserted_id)
-            full_name = name
-
-        # 3. Tạo Token nội bộ (JWT)
-        access_token = create_access_token(data={"sub": user_id})
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "username": final_username,
-            "auth_provider": "facebook",
-            "user_id": user_id,
-            "full_name": full_name
-        }
-
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"Facebook Login Error: {e}")
-        raise HTTPException(status_code=500, detail="Lỗi xác thực Facebook")

@@ -1,0 +1,347 @@
+/* ==========================================
+   VISUAL SEARCH - UNIQUE DARK MODE
+   ========================================== */
+
+.visual-search-page {
+    padding: var(--space-8) 0;
+    min-height: calc(100vh - 64px);
+    background: var(--bg-primary);
+}
+
+.visual-search-page .page-header {
+    text-align: center;
+    margin-bottom: var(--space-8);
+}
+
+.visual-search-page .page-header h1 {
+    margin-bottom: var(--space-2);
+}
+
+.visual-search-page .page-header p {
+    color: var(--text-secondary);
+}
+
+/* Upload Area - Unique */
+.upload-area {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: var(--space-16) var(--space-8);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius-xl);
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    background: var(--bg-secondary);
+}
+
+.upload-area:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.upload-icon {
+    font-size: 3.5rem;
+    margin-bottom: var(--space-4);
+}
+
+.upload-area p {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: var(--space-2);
+}
+
+.upload-hint {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+/* Preview */
+.preview-section {
+    max-width: 500px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.preview-image {
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: var(--space-4);
+    background: var(--bg-tertiary);
+    border: var(--card-border);
+}
+
+.preview-image img {
+    max-width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+}
+
+.preview-actions {
+    display: flex;
+    gap: var(--space-4);
+    justify-content: center;
+}
+
+/* Error */
+.visual-search-page .error-msg {
+    max-width: 500px;
+    margin: var(--space-6) auto;
+    padding: var(--space-4);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--error);
+    text-align: center;
+}
+
+/* Result Modal Overlay */
+.result-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--space-4);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.result-modal {
+    background: var(--card-bg);
+    border-radius: var(--radius-xl);
+    padding: var(--space-8);
+    max-width: 450px;
+    width: 100%;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.4s ease-out;
+}
+
+/* Confidence Box - Large & Prominent */
+.confidence-box {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
+    border: 2px solid var(--success);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.confidence-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.confidence-value {
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--success);
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(16, 185, 129, 0.3);
+}
+
+.confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--success);
+    color: white;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    font-size: var(--font-size-base);
+}
+
+.confidence-box.not-found {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05));
+    border-color: var(--warning);
+    padding: var(--space-8);
+}
+
+.confidence-badge.warning {
+    background: var(--warning);
+    font-size: var(--font-size-lg);
+}
+
+/* Landmark Info in Modal */
+.result-info-modal {
+    margin-bottom: var(--space-6);
+}
+
+.result-image-modal {
+    width: 180px;
+    height: 130px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: var(--card-border);
+}
+
+.result-image-modal img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.result-info-modal h2 {
+    font-size: var(--font-size-xl);
+    margin: 0 0 var(--space-2);
+    color: var(--text-primary);
+}
+
+.result-location-modal {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-1);
+}
+
+.result-address-modal {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Actions */
+.result-actions-modal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.result-actions-modal .btn {
+    width: 100%;
+}
+
+/* Not Found */
+.not-found-message {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-6);
+}
+
+/* ==========================================
+   RESPONSIVE - Screen Size Adaptations
+   ========================================== */
+
+/* Result Modal - Make scrollable on small screens */
+.result-modal {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Large screens (desktop) */
+@media (min-height: 800px) {
+    .result-modal {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .confidence-value {
+        font-size: 4.5rem;
+    }
+
+    .result-image-modal {
+        width: 200px;
+        height: 150px;
+    }
+}
+
+/* Medium screens (tablets, small laptops) */
+@media (max-height: 700px) {
+    .result-modal {
+        padding: var(--space-5);
+    }
+
+    .confidence-box {
+        padding: var(--space-4);
+        margin-bottom: var(--space-4);
+    }
+
+    .confidence-value {
+        font-size: 3rem;
+    }
+
+    .confidence-badge {
+        padding: var(--space-1) var(--space-3);
+        font-size: var(--font-size-sm);
+    }
+
+    .result-image-modal {
+        width: 140px;
+        height: 100px;
+        margin-bottom: var(--space-3);
+    }
+
+    .result-info-modal {
+        margin-bottom: var(--space-4);
+    }
+
+    .result-info-modal h2 {
+        font-size: var(--font-size-lg);
+    }
+}
+
+/* Small screens (phones) */
+@media (max-height: 600px) {
+    .result-overlay {
+        padding: var(--space-2);
+    }
+
+    .result-modal {
+        padding: var(--space-4);
+        max-height: 95vh;
+    }
+
+    .confidence-box {
+        padding: var(--space-3);
+        margin-bottom: var(--space-3);
+    }
+
+    .confidence-value {
+        font-size: 2.5rem;
+    }
+
+    .result-image-modal {
+        width: 100px;
+        height: 75px;
+    }
+
+    .result-info-modal h2 {
+        font-size: var(--font-size-base);
+    }
+
+    .result-actions-modal {
+        gap: var(--space-2);
+    }
+
+    .result-actions-modal .btn {
+        padding: var(--space-2) var(--space-4);
+        font-size: var(--font-size-sm);
+    }
+}
+
+/* Width-based responsiveness */
+@media (max-width: 480px) {
+    .result-modal {
+        max-width: 95%;
+        padding: var(--space-4);
+    }
+
+    .confidence-value {
+        font-size: 2.5rem;
+    }
+
+    .result-address-modal {
+        font-size: 0.75rem;
+    }
+}

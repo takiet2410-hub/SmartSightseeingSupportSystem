@@ -58,6 +58,7 @@ class SummaryService:
         valid_points = []   # Points to plot on map
         timeline_names = [] # Location names
         album_dates = []    # Dates for sorting
+        location_data = []  # Album data for frontend (cover, sample photos)
         total_photos = 0
         
         # Date tracking
@@ -71,8 +72,7 @@ class SummaryService:
             display_title = album_title
             method = album.get("method", "")
 
-            if method == "filters_rejected" or "Review Needed" in album_title:
-                continue
+            # Note: Removed filter for "Review Needed" albums - let users include any album they select
 
             photos = album.get("photos", [])
             total_photos += len(photos)
@@ -144,14 +144,32 @@ class SummaryService:
                 valid_points.append((final_lat, final_lon))
                 timeline_names.append(display_title)
                 album_dates.append(album_date)
+                
+                logger.info(f"✅ Added album '{display_title}' with GPS: ({final_lat}, {final_lon})")
+                
+                # Collect location data for frontend
+                cover_url = None
+                if photos and len(photos) > 0:
+                    cover_url = photos[0].get("image_url")
+                
+                location_data.append({
+                    "title": display_title,
+                    "cover_url": cover_url,
+                    "photo_count": len(photos)
+                })
+            else:
+                logger.warning(f"⚠️ Album '{album_title}' skipped - no valid GPS coordinates")
+
+        # Log final array sizes
+        logger.info(f"📊 Final arrays: points={len(valid_points)}, timeline={len(timeline_names)}, locations={len(location_data)}")
 
         # ✅ FIX: SORT BY DATE (OLDEST TO NEWEST)
         if album_dates and any(d is not None for d in album_dates):
-            # Create tuples of (date, point, name) and sort by date
-            combined = list(zip(album_dates, valid_points, timeline_names))
+            # Create tuples of (date, point, name, loc_data) and sort by date
+            combined = list(zip(album_dates, valid_points, timeline_names, location_data))
             # Filter out None dates and sort
-            combined_with_dates = [(d, p, n) for d, p, n in combined if d is not None]
-            combined_without_dates = [(d, p, n) for d, p, n in combined if d is None]
+            combined_with_dates = [(d, p, n, l) for d, p, n, l in combined if d is not None]
+            combined_without_dates = [(d, p, n, l) for d, p, n, l in combined if d is None]
             
             # Sort by date (oldest first)
             combined_with_dates.sort(key=lambda x: x[0])
@@ -160,10 +178,11 @@ class SummaryService:
             combined = combined_with_dates + combined_without_dates
             
             # Unpack back to separate lists
-            album_dates, valid_points, timeline_names = zip(*combined) if combined else ([], [], [])
+            album_dates, valid_points, timeline_names, location_data = zip(*combined) if combined else ([], [], [], [])
             valid_points = list(valid_points)
             timeline_names = list(timeline_names)
             album_dates = list(album_dates)
+            location_data = list(location_data)
             
             logger.info(f"✅ Sorted {len(combined)} locations by date (oldest to newest)")
 
@@ -198,7 +217,8 @@ class SummaryService:
             "start_date": start_date,
             "end_date": end_date,
             "timeline": timeline_names,
-            "points": [[lat, lon] for lat, lon in valid_points]
+            "points": [[lat, lon] for lat, lon in valid_points],
+            "locations": location_data  # Album data for markers/popups
         }
 
         # 6. Add map data based on configuration
@@ -385,6 +405,7 @@ class SummaryService:
             "end_date": "",
             "timeline": [],
             "points": [],
+            "locations": [],  # Empty locations array
             "map_data": {
                 "type": "none",
                 "url": ""

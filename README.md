@@ -665,6 +665,10 @@ Find the **`POST /visual-search`** endpoint.
       * If you successfully completed Step A (Authentication), the API will ignore the `X-Temp-ID` and save the result directly to your User History.
      
 #### C. Synchronize History (`POST /history/sync`)
+<<<<<<< HEAD
+
+=======
+>>>>>>> main
   * **Context:** This is a **hidden background function**. In the real application, the Frontend automatically calls this endpoint immediately after a user logs in to merge their "Guest History" into their "User Account".
 
   * **How to Test in Swagger:**
@@ -720,6 +724,10 @@ This endpoint provides full metadata about a specific detection, including the m
 5.  **Result:** You will receive a detailed JSON object containing the landmark's full information (description, location, tags) and the link to the reference image used for matching.
 
 #### F. Delete History (`DELETE /history/delete`)
+<<<<<<< HEAD
+
+=======
+>>>>>>> main
 This endpoint allows you to remove specific items. It performs a "Dual Delete": removing the record from **MongoDB** and destroying the actual image on **Cloudinary**.
 
 1.  Ensure you are Authorized.
@@ -930,46 +938,88 @@ Frontend Visualization
 
 ## 5. Frontend Application
 
-_The user interface built with React/Vue/Mobile._
+*React + Vite frontend connecting all backend services.*
 
-### Setup & Run
+### Requirements
 
-1. Navigate to the directory: `cd frontend`
-    
-2. Install dependencies:
-    
-    Bash
-    
-    ```
-    npm install
-    # or
-    yarn install
-    ```
-    
-3. Configure Environment:
-    
-    - Create `.env` file.
-        
-    - Set API Base URLs:
-        
-        Code snippet
-        
-        ```
-        VITE_AUTH_API=http://localhost:8000
-        VITE_BEFORE_API=http://localhost:8001
-        VITE_DURING_API=http://localhost:8002
-        VITE_AFTER_API=http://localhost:8003
-        ```
-        
-4. **Start Application:**
-    
-    Bash
-    
-    ```
-    npm run dev
-    ```
-    
-5. Open browser at `http://localhost:3000` (or the port shown in terminal).
+- **Node.js v18.x+**
+- **npm v9.x+**
+
+### Installation & Local Run
+
+**1. Navigate to the directory:**
+
+```bash
+cd frontend
+```
+
+**2. Install dependencies:**
+
+```bash
+npm install
+```
+
+**3. Configure environment:**
+
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+**Local Development Configuration (leave empty - uses Vite proxy):**
+
+```env
+# Leave all empty - Vite proxy will handle routing
+VITE_BEFORE_API_URL=
+VITE_DURING_API_URL=
+VITE_AFTER_API_URL=
+VITE_AUTH_API_URL=
+
+# Google OAuth (optional)
+VITE_GOOGLE_CLIENT_ID=your_google_client_id
+```
+
+**4. Start development server:**
+
+```bash
+npm run dev
+```
+
+**5. Access the application:**
+
+Open browser at **http://localhost:5173**
+
+### Backend Ports Configuration
+
+Frontend uses Vite proxy to connect to backend services:
+
+| API Route | Backend Service | Port |
+|-----------|-----------------|------|
+| `/auth/*` | Auth Service | 8000 |
+| `/api/*` | Before Service | 8001 |
+| `/during/*` | During Service | 8002 |
+| `/after/*` | After Service | 8003 |
+
+> **Note:** Ensure all 4 backend services are running before using the frontend.
+
+### Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Run development server |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Check code for errors |
+
+### Tech Stack
+
+- React 19
+- Vite 7
+- React Router DOM
+- Axios
+- Leaflet (Maps)
+- React Dropzone
     
 ---
 
@@ -984,7 +1034,6 @@ To test the complete flow of the system:
 3. **Registration/Login:** Create an account (Hits **Auth Service**).
     
 4. **Search Places or Get Recommendation:** Find a place to travel (Hits **Before Service**).
-
 5. **Visual Search:** Upload an image of a landmark (Hits **During Service**).
     
 6. **Create Album:** Create Albums and Trip Summary based on the pictures you take (Hits **After Service**).
