@@ -421,7 +421,7 @@ async def get_my_albums(current_user_id: str = Depends(get_current_user_id)):
 
 @app.post("/swagger-login")
 async def swagger_login_proxy(form_data: OAuth2PasswordRequestForm = Depends()):
-    auth_url = "http://localhost:8001/auth/login"
+    auth_url = "http://localhost:8000/auth/login"
     try:
         response = requests.post(auth_url, json={"username": form_data.username, "password": form_data.password})
         if response.status_code == 200: return response.json()
