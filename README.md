@@ -861,6 +861,26 @@ Each generated album contains:
 
 3. Configure `.env` file.
 
+```
+# Google Maps / Goong
+GOONG_API_KEY= your_super_secret_key
+MAPBOX_TOKEN=your_super_secret_key
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=your_super_secret_key
+CLOUDINARY_API_KEY=your_super_secret_key
+CLOUDINARY_API_SECRET=your_super_secret_key
+
+# Security
+SECRET_KEY=your_super_secret_key
+ALGORITHM=hashing_algorithm
+
+# MongoDB
+MONGO_URI=your_super_secret_key
+DB_NAME=your_db_name
+COLLECTION_NAME=collection_name
+```
+
 4. **Start Server:**
 
    ```bash
