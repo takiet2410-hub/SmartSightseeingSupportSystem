@@ -851,81 +851,77 @@ Each generated album contains:
 * `GET /summary/history` – View trip summary history
 * `POST /geocode/osm` – Convert address text to coordinates (OSM)
 
+## Setup & Run (Updated)
+
+> ⚠️ **Important:** The **Auth Service must be running first and create an login account in auth** before starting or testing the After Service.
+
+### Prerequisites
+
+1. **Start Auth Service**
+
+   * Navigate to the auth service directory
+   * Configure its `.env`
+   * Start the auth server (example):
+
+     ```bash
+     uvicorn main:app --reload --port 8000
+     ```
+   * Ensure authentication APIs are accessible.
+
 ---
 
-### Setup & Run
+### After Service Setup
 
-1. Navigate to the directory: `cd after`
+1. Navigate to the directory:
+
+   ```bash
+   cd after
+   ```
 
 2. Activate virtual environment & install dependencies.
 
-3. Configure `.env` file.
+3. Configure `.env` file:
 
-```
-# Google Maps / Goong
-GOONG_API_KEY= your_super_secret_key
-MAPBOX_TOKEN=your_super_secret_key
+   ```env
+   # Maps / Geocoding
+   GOONG_API_KEY=your_super_secret_key
+   MAPBOX_TOKEN=your_super_secret_key
 
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=your_super_secret_key
-CLOUDINARY_API_KEY=your_super_secret_key
-CLOUDINARY_API_SECRET=your_super_secret_key
+   # Cloudinary
+   CLOUDINARY_CLOUD_NAME=your_super_secret_key
+   CLOUDINARY_API_KEY=your_super_secret_key
+   CLOUDINARY_API_SECRET=your_super_secret_key
 
-# Security
-SECRET_KEY=your_super_secret_key
-ALGORITHM=hashing_algorithm
+   # Security
+   SECRET_KEY=your_super_secret_key
+   ALGORITHM=hashing_algorithm
 
-# MongoDB
-MONGO_URI=your_super_secret_key
-DB_NAME=your_db_name
-COLLECTION_NAME=collection_name
-```
+   # MongoDB
+   MONGO_URI=your_super_secret_key
+   DB_NAME=your_db_name
+   COLLECTION_NAME=collection_name
+   ```
 
-4. **Start Server:**
+4. **Start After Service Server**
 
    ```bash
    uvicorn main:app --reload --port 8003
    ```
 
-> **Note:** The After service runs on **Port 8003** (Example).
+> ✅ Once **Auth Service** is running, you can safely test album creation, sharing, and trip summary APIs.
 
 ---
 
-### ✅ Logical Flow Recap
+### Recommended Start Order
 
 ```text
-User Uploads Photos
-        ↓
-Album Generation
-        ↓
-Album Management / Location Adjustment
-        ↓
-Trip Summary Creation
-        ↓
-Frontend Visualization
+Auth Service
+     ↓
+After Service
+     ↓
+Frontend Testing
 ```
 
-
-### 🔁 Data Flow Integration
-
-* Receives detection history and landmark metadata from the **During Service**.
-* Uses user authentication information from the **Auth Service**.
-* Sends structured trip data to the **Frontend** for visualization and interaction.
-
----
-
-### 🧩 Example Features
-
-* 📍 **Manual Location Selection:**
-  If photos lack GPS metadata, users can manually select the location on a map to ensure accuracy.
-
-* 🗂️ **Auto-Generated Travel Timeline:**
-  Photos are ordered chronologically and grouped by location.
-
-* ⭐ **Experience Rating:**
-  Users can rate their overall trip or individual landmarks.
-
----
 
 ### Setup & Run
 
