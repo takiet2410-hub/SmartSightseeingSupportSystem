@@ -665,10 +665,6 @@ Find the **`POST /visual-search`** endpoint.
       * If you successfully completed Step A (Authentication), the API will ignore the `X-Temp-ID` and save the result directly to your User History.
      
 #### C. Synchronize History (`POST /history/sync`)
-<<<<<<< HEAD
-
-=======
->>>>>>> main
   * **Context:** This is a **hidden background function**. In the real application, the Frontend automatically calls this endpoint immediately after a user logs in to merge their "Guest History" into their "User Account".
 
   * **How to Test in Swagger:**
@@ -724,10 +720,6 @@ This endpoint provides full metadata about a specific detection, including the m
 5.  **Result:** You will receive a detailed JSON object containing the landmark's full information (description, location, tags) and the link to the reference image used for matching.
 
 #### F. Delete History (`DELETE /history/delete`)
-<<<<<<< HEAD
-
-=======
->>>>>>> main
 This endpoint allows you to remove specific items. It performs a "Dual Delete": removing the record from **MongoDB** and destroying the actual image on **Cloudinary**.
 
 1.  Ensure you are Authorized.
