@@ -55,9 +55,8 @@ async def send_email_via_brevo(to_email: str, subject: str, html_content: str):
 
 # --- Hàm gửi xác thực tài khoản ---
 async def send_verification_email(email: EmailStr, token: str):
-    # 👇 THAY LINK NÀY BẰNG LINK DIRECT SPACE CỦA BẠN
-    # Cách lấy: Vào Space -> Bấm "Embed this space" -> Copy cái "Direct URL"
-    base_url = "https://takiet2410-auth-server.hf.space"
+    # Lấy URL từ biến môi trường, fallback về URL mặc định
+    base_url = os.getenv("AUTH_SERVER_URL", "https://novaaa1011-auth.hf.space")
     
     # Link trỏ về API Backend để kích hoạt
     verification_link = f"{base_url}/auth/verify-email?token={token}"
@@ -80,7 +79,8 @@ async def send_verification_email(email: EmailStr, token: str):
 
 # --- Hàm gửi quên mật khẩu ---
 async def send_reset_email(email: EmailStr, token: str):
-    base_url = "https://takiet2410-auth-server.hf.space"
+    # Lấy URL từ biến môi trường, fallback về URL mặc định
+    base_url = os.getenv("AUTH_SERVER_URL", "https://novaaa1011-auth.hf.space")
     
     # Link trỏ về trang Giao diện HTML (main.py)
     reset_link = f"{base_url}/reset-password?token={token}"

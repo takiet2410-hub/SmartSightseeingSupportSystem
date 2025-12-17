@@ -1,13 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from datetime import datetime
-<<<<<<< HEAD
-import shared_resources
-=======
 from typing import List
 from zoneinfo import ZoneInfo
 import shared_resources
 import cloudinary
->>>>>>> db79ddd0149174a577c6c2d29a3c2a5f3a75bc33
 import cloudinary.uploader 
 import io
 import hashlib 
@@ -53,12 +49,8 @@ def add_history_record(
     elif uploaded_image_bytes:
         current_image_hash = get_image_hash(uploaded_image_bytes)
 
-<<<<<<< HEAD
-    timestamp = custom_timestamp if custom_timestamp else datetime.utcnow().isoformat()
-=======
     vn_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) 
     timestamp = custom_timestamp if custom_timestamp else vn_time.isoformat()
->>>>>>> db79ddd0149174a577c6c2d29a3c2a5f3a75bc33
     
     # --- CHECK DUPLICATE ---
     for i, item in enumerate(history_list):
@@ -108,11 +100,7 @@ def add_history_record(
     if not user_doc:
         col.insert_one({
             "user_id": user_id,
-<<<<<<< HEAD
-            "created_at": datetime.utcnow(),
-=======
             "created_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
->>>>>>> db79ddd0149174a577c6c2d29a3c2a5f3a75bc33
             "history": [new_record]
         })
     else:
@@ -128,12 +116,8 @@ def add_temp_record(temp_id: str, landmark_data: dict, uploaded_image_bytes: byt
     temp_doc = col.find_one({"temp_id": temp_id})
     
     current_image_hash = get_image_hash(uploaded_image_bytes)
-<<<<<<< HEAD
-    current_time_iso = datetime.utcnow().isoformat()
-=======
     # Lấy giờ hiện tại theo múi giờ Hồ Chí Minh
     current_time_iso = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()
->>>>>>> db79ddd0149174a577c6c2d29a3c2a5f3a75bc33
 
     history_list = temp_doc.get("history", []) if temp_doc else []
     
@@ -166,11 +150,7 @@ def add_temp_record(temp_id: str, landmark_data: dict, uploaded_image_bytes: byt
     if not temp_doc:
         col.insert_one({
             "temp_id": temp_id,
-<<<<<<< HEAD
-            "created_at": datetime.utcnow(),
-=======
             "created_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
->>>>>>> db79ddd0149174a577c6c2d29a3c2a5f3a75bc33
             "history": [new_record]
         })
     else:
@@ -212,9 +192,6 @@ def sync_temp_history(
 
     temp_col.delete_one({"temp_id": temp_id})
 
-<<<<<<< HEAD
-    return {"status": "synced", "count": len(temp_history)}
-=======
     return {"status": "synced", "count": len(temp_history)}
 
 # =========================================================================
@@ -296,4 +273,3 @@ def delete_history_items(
         "deleted_db_count": result.modified_count, # Số user bị ảnh hưởng (thường là 1)
         "deleted_cloud_images": deleted_cloud_count # Số ảnh đã xoá trên Cloud
     }
->>>>>>> db79ddd0149174a577c6c2d29a3c2a5f3a75bc33

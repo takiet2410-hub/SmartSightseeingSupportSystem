@@ -7,7 +7,7 @@ Welcome to the **Smart Sightseeing Support System**. This project utilizes a **M
 
 1. **Auth Service:** Manages User Authentication & Authorization.
     
-2. **Before Service:** "Your_During_Feature_Here".
+2. **Before Service:** Smart Recommendation System.
     
 3. **During Service:**  Sightseeing Landmarks recognition and history.
     
@@ -623,7 +623,7 @@ Run the following command in your terminal:
 Open your web browser and navigate to:
 
 ```
-    http://127.0.0.1:8000/docs
+    http://127.0.0.1:8002/docs
 ```
 
 You will see the interactive API documentation provided by Swagger UI.
@@ -861,6 +861,26 @@ Each generated album contains:
 
 3. Configure `.env` file.
 
+```
+# Google Maps / Goong
+GOONG_API_KEY= your_super_secret_key
+MAPBOX_TOKEN=your_super_secret_key
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=your_super_secret_key
+CLOUDINARY_API_KEY=your_super_secret_key
+CLOUDINARY_API_SECRET=your_super_secret_key
+
+# Security
+SECRET_KEY=your_super_secret_key
+ALGORITHM=hashing_algorithm
+
+# MongoDB
+MONGO_URI=your_super_secret_key
+DB_NAME=your_db_name
+COLLECTION_NAME=collection_name
+```
+
 4. **Start Server:**
 
    ```bash
@@ -930,46 +950,88 @@ Frontend Visualization
 
 ## 5. Frontend Application
 
-_The user interface built with React/Vue/Mobile._
+*React + Vite frontend connecting all backend services.*
 
-### Setup & Run
+### Requirements
 
-1. Navigate to the directory: `cd frontend`
-    
-2. Install dependencies:
-    
-    Bash
-    
-    ```
-    npm install
-    # or
-    yarn install
-    ```
-    
-3. Configure Environment:
-    
-    - Create `.env` file.
-        
-    - Set API Base URLs:
-        
-        Code snippet
-        
-        ```
-        VITE_AUTH_API=http://localhost:8001
-        VITE_BEFORE_API=http://localhost:8002
-        VITE_DURING_API=http://localhost:8000
-        VITE_AFTER_API=http://localhost:8003
-        ```
-        
-4. **Start Application:**
-    
-    Bash
-    
-    ```
-    npm run dev
-    ```
-    
-5. Open browser at `http://localhost:3000` (or the port shown in terminal).
+- **Node.js v18.x+**
+- **npm v9.x+**
+
+### Installation & Local Run
+
+**1. Navigate to the directory:**
+
+```bash
+cd frontend
+```
+
+**2. Install dependencies:**
+
+```bash
+npm install
+```
+
+**3. Configure environment:**
+
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+**Local Development Configuration (leave empty - uses Vite proxy):**
+
+```env
+# Leave all empty - Vite proxy will handle routing
+VITE_BEFORE_API_URL=
+VITE_DURING_API_URL=
+VITE_AFTER_API_URL=
+VITE_AUTH_API_URL=
+
+# Google OAuth (optional)
+VITE_GOOGLE_CLIENT_ID=your_google_client_id
+```
+
+**4. Start development server:**
+
+```bash
+npm run dev
+```
+
+**5. Access the application:**
+
+Open browser at **http://localhost:5173**
+
+### Backend Ports Configuration
+
+Frontend uses Vite proxy to connect to backend services:
+
+| API Route | Backend Service | Port |
+|-----------|-----------------|------|
+| `/auth/*` | Auth Service | 8000 |
+| `/api/*` | Before Service | 8001 |
+| `/during/*` | During Service | 8002 |
+| `/after/*` | After Service | 8003 |
+
+> **Note:** Ensure all 4 backend services are running before using the frontend.
+
+### Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Run development server |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Check code for errors |
+
+### Tech Stack
+
+- React 19
+- Vite 7
+- React Router DOM
+- Axios
+- Leaflet (Maps)
+- React Dropzone
     
 ---
 
@@ -984,7 +1046,6 @@ To test the complete flow of the system:
 3. **Registration/Login:** Create an account (Hits **Auth Service**).
     
 4. **Search Places or Get Recommendation:** Find a place to travel (Hits **Before Service**).
-
 5. **Visual Search:** Upload an image of a landmark (Hits **During Service**).
     
 6. **Create Album:** Create Albums and Trip Summary based on the pictures you take (Hits **After Service**).

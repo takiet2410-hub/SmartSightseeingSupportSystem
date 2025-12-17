@@ -1,0 +1,206 @@
+/* ==========================================
+   AI RECOMMENDATIONS - UNIQUE DARK MODE
+   ========================================== */
+
+.ai-page {
+    padding: var(--space-8) 0;
+    min-height: calc(100vh - 64px);
+    background: var(--bg-primary);
+}
+
+.ai-page .page-header {
+    text-align: center;
+    margin-bottom: var(--space-8);
+}
+
+.ai-page .page-header h1 {
+    margin-bottom: var(--space-2);
+}
+
+/* Search Form */
+.search-form {
+    max-width: 600px;
+    margin: 0 auto var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.prompt-input {
+    resize: none;
+    background: var(--bg-secondary);
+}
+
+/* Examples */
+.examples {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.examples-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-3);
+}
+
+.examples-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    justify-content: center;
+}
+
+.example-btn {
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-secondary);
+    border: var(--card-border);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-family: var(--font-sans);
+}
+
+.example-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* Loading */
+.loading-state {
+    text-align: center;
+    padding: var(--space-12) 0;
+}
+
+.loading-state p {
+    margin-top: var(--space-4);
+    color: var(--text-secondary);
+}
+
+/* Error */
+.ai-page .error-msg {
+    max-width: 600px;
+    margin: var(--space-6) auto;
+    padding: var(--space-4);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--error);
+    text-align: center;
+}
+
+/* Results */
+.results {
+    margin-top: var(--space-8);
+}
+
+.results h2 {
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--space-6);
+}
+
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
+    gap: var(--space-6);
+}
+
+@media (min-width: 768px) {
+    .results-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .results-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Result Card */
+.result-card {
+    background: var(--card-bg);
+    border: var(--card-border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    transition: all var(--transition-base);
+}
+
+.result-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-glow);
+}
+
+.result-image {
+    aspect-ratio: 16/10;
+    background: var(--bg-tertiary);
+    overflow: hidden;
+}
+
+.result-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--transition-slow);
+}
+
+.result-card:hover .result-image img {
+    transform: scale(1.05);
+}
+
+.result-content {
+    padding: var(--space-4);
+}
+
+.result-content h3 {
+    font-size: var(--font-size-base);
+    margin: 0 0 var(--space-2) 0;
+}
+
+.result-location {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin: 0 0 var(--space-3) 0;
+}
+
+.result-justification {
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    background: var(--accent-soft);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+    border-left: 3px solid var(--accent);
+}
+
+.result-activities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+.activity-tag {
+    padding: var(--space-1) var(--space-2);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.result-weather {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-4);
+}
+
+/* Empty State */
+.ai-page .empty-state {
+    text-align: center;
+    padding: var(--space-12) 0;
+    color: var(--text-secondary);
+}

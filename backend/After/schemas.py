@@ -62,7 +62,7 @@ class TripSummaryResponse(BaseModel):
     timeline: List[str]
     points: List[List[float]]           # 🔴 FIX #1
     map_data: Dict[str, Any]             # 🔴 FIX #2
-     
+    locations: List[Dict[str, Any]] = [] # Album data for markers
 
 class AlbumUpdateRequest(BaseModel):
     title: str

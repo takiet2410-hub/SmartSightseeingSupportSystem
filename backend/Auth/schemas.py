@@ -42,7 +42,3 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
     confirm_password: str
-
-# 8. Dữ liệu gửi lên khi Đăng nhập FACEBOOK (MỚI THÊM)
-class FacebookAuth(BaseModel):
-    access_token: str

@@ -125,7 +125,7 @@ python -m unittest Tests.test_lighting
 ## 6. Expected Result
 
 ```text
-Ran 86 tests in ~2–3 seconds
+Ran 76 tests in ~2–3 seconds
 OK
 ```
 

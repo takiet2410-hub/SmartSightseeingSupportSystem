@@ -41,7 +41,6 @@ def build_vector_search_filter(constraints: HardConstraints) -> Dict[str, Any]:
         filter_conditions["season_tag"] = {"$in": constraints.season_tag}
         
     return filter_conditions
-
 # --- 1. GET LIST (PAGINATION) ---
 def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption, page: int = 1, limit: int = 10) -> Dict[str, Any]:
     collection = get_db_collection()
@@ -116,7 +115,6 @@ def get_destinations_paginated(filters: HardConstraints, sort_option: SortOption
         "limit": limit,
         "total_pages": total_pages
     }
-
 # --- 2. GET DETAIL BY ID ---
 def get_destination_details(landmark_id: str) -> Optional[Dict[str, Any]]:
     collection = get_db_collection()
